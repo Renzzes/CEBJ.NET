@@ -1,0 +1,10 @@
+/etc/config/nodogsplash
+/usr/bin/nodogsplash
+/usr/bin/ndsctl
+/etc/uci-defaults/40_nodogsplash
+/etc/nodogsplash/htdocs/status.html
+/usr/lib/nodogsplash/restart.sh
+/etc/init.d/nodogsplash
+/etc/nodogsplash/htdocs/splash.html
+/etc/nodogsplash/htdocs/images/splash.jpg
+/etc/nodogsplash/htdocs/splash.css

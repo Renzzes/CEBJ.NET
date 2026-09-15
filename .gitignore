@@ -1,0 +1,49 @@
+﻿# Python / tooling
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/venv/
+**/.pytest_cache/
+**/*.egg-info/
+**/dist/
+**/build/
+*.log
+
+# Node / local caches
+**/node_modules/
+**/.cache/
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# OpenWrt ImageBuilder / WSL temp (if present)
+**/openwrt-imagebuilder*/
+**/tmp/
+**/.tmp/
+
+# Large vendor / OEM stock archives (keep production KonekSik .bin)
+RG-EW1200G PRO Router ReyeeOS 1.313 firmware/
+RG-EW1200G PRO Router ReyeeOS 1.313 firmware.zip
+ruijie_rg-ew1200g-pro_stock.bin
+FASTFI-RUIJIE-EW1200G-PRO-V2.5.1.bin
+
+# PyInstaller one-file unpack noise under Production flasher packs
+**/_internal/
+
+# Local secrets â€” never commit
+**/.env
+**/secrets/
+**/*credentials*
+
+# OTA bundle outputs (attach on GitHub Releases, not in git history)
+**/update.tar.gz
+**/sha256sums
+/release-assets/
+# License issuer keys (keep offline; do not publish)
+**/issuer_ed25519.pem
+**/issuer_ed25519.pub.pem

@@ -1,0 +1,26 @@
+{
+  "forensic_date": "2026-09-13",
+  "root_cause": "Windows extraction of FASTFI SquashFS converted Unix symlinks into regular files whose contents are 'SYMLINK -> <target>'. build-image.sh rsync'd those placeholders into OpenWrt ImageBuilder FILES= overlay, overwriting package-provided real symlinks. Only /var was previously restored.",
+  "first_bad_step": {
+    "creation_of_placeholders": "EXTRACTED-OPENWRT-FASTFI-V2.5.1 Windows extract (see symlinks.json + 00-FIRMWARE-INFO.txt)",
+    "shipping_into_image": "EXTRACTED-OPENWRT-FASTFI-V2.5.1/rootfs/build-image.sh → rsync -a \"$REPO_ROOT/\" \"$OVERLAY_DIR/\" → make image FILES=\"$OVERLAY_DIR\""
+  },
+  "verified_squashfs": {
+    "FASTFI": { "symlinks": 248, "marker_files": 0 },
+    "KonekSik_current_production_bin": { "symlinks": 39, "marker_files": 209, "fastfi_symlinks_corrupted": 209 }
+  },
+  "fix_applied": [
+    "build-image.sh: restore_symlink_placeholders() before make image + hard fail on leftovers",
+    "tools/restore-symlink-placeholders.py: restored 248 placeholders in EXTRACTED rootfs to real NTFS/WSL-visible symlinks",
+    "tools/validate-firmware-symlinks.py: post-build gate",
+    "tools/build-ruijie-wsl.ps1: runs validator after build"
+  ],
+  "rebuild_status": "NOT REBUILT — WSL Ubuntu not installed on this laptop",
+  "flash_status": "NOT FLASHED",
+  "koneksik_features_preserved": {
+    "db_schema_version": 36,
+    "tailscale": true,
+    "gcash": true,
+    "admin_ui": true
+  }
+}

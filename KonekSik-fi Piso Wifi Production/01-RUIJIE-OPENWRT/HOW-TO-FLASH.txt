@@ -1,0 +1,4 @@
+Ruijie EW1200G Pro
+------------------
+Upload KonekSik-fi-EW1200G-PRO-sysupgrade.bin via Admin OTA / sysupgrade.
+Wait for reboot. Do not power off mid-flash.

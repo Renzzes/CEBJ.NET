@@ -1,0 +1,13 @@
+Package: uboot-envtools
+Version: 2024.07-r1
+Depends: libc
+Source: feeds/base/boot/uboot-envtools
+SourceName: uboot-envtools
+License: GPL-2.0 GPL-2.0+
+LicenseFiles: Licenses/README
+Section: utils
+SourceDateEpoch: 1762695726
+URL: http://www.denx.de/wiki/U-Boot
+Architecture: mipsel_24kc
+Installed-Size: 92160
+Description:  This package includes tools to read and modify U-Boot bootloader environment.

@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>FastFi Admin</title>
+<script>
+  // uhttpd has no rewrite engine, so /admin cannot be aliased in config. It DOES
+  // serve a directory's index_page and 302s /admin -> /admin/, so this file gives
+  // the short URL without touching the server config.
+  // Carry search + hash across so /admin#sessions still lands correctly —
+  // admin.js routes off location.hash.
+  location.replace('/admin.html' + location.search + location.hash);
+</script>
+</head><body>Redirecting to <a href="/admin.html">/admin.html</a>…</body></html>

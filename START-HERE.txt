@@ -1,0 +1,41 @@
+KonekSik-fi — quick steps
+=========================
+
+FULL GUIDE (detailed):
+  Open KONEKSIK-GUIDE.md in this folder.
+
+DEVELOP ON THIS PC
+  1. PREVIEW-UI.bat
+  2. Browser: http://127.0.0.1:8765/admin-preview.html
+  3. Edit files under EXTRACTED-OPENWRT-FASTFI-V2.5.1\rootfs\
+
+MOVE TO LAPTOP / OTHER PC
+  1. Copy the WHOLE folder: "RUIJIE EW1200G PRO DOWNGRADE FILES"
+  2. Open it in Cursor on the laptop
+  3. PREVIEW-UI.bat for Admin UI work
+  4. To flash existing builds: use files inside
+     "KonekSik-fi Piso Wifi Production\"  (no rebuild needed)
+  5. To rebuild Ruijie after UI changes:
+     - Install WSL once, reboot
+     - BUILD-RUIJIE-BIN.bat  (do NOT Run as administrator)
+  6. Copy folder back to office when done
+
+WHEN ADMIN UI IS READY
+  - BUILD-RUIJIE-BIN.bat     = router .bin only
+  - BUILD-PRODUCTION.bat    = full pack (Ruijie + ESP + flasher + APK)
+  You usually need one of these, not both every time.
+
+FLASH RUIJIE
+  File: Production\01-RUIJIE-OPENWRT\KonekSik-fi-EW1200G-PRO-sysupgrade.bin
+  Admin -> OTA Update -> Upload Firmware -> Flash
+
+FLASH ESP + LICENSE
+  Production\02-ESP-COINSLOT\Flasher-and-License\START-FLASHER.bat
+  (opens .exe if present)
+  Select board + COM + firmware -> Flash + License
+
+SITE INSTALL ORDER
+  1) Ruijie .bin
+  2) ESP flash + license
+  3) Admin setup
+  4) Optional GCash APK on OPERATOR phone only

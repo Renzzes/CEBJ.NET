@@ -1,0 +1,20 @@
+{
+  "id": "esp8266_wifi",
+  "name": "ESP8266 WiFi coinslot",
+  "chip": "esp8266",
+  "network": "wifi",
+  "wireless": true,
+  "esptool_chip": "esp8266",
+  "flash_mode": "dout",
+  "flash_freq": "40m",
+  "flash_size": "4MB",
+  "default_firmware": "firmware/esp8266_wifi.bin",
+  "notes": "Classic WiFi coinslot. No W5500.",
+  "pins": {
+    "coin_primary": { "gpio": 4, "label": "D2", "role": "Coin pulse (primary)" },
+    "coin_backup": { "gpio": 5, "label": "D1", "role": "Coin pulse (backup)" },
+    "relay": { "gpio": 15, "label": "D8", "role": "Relay" },
+    "led": { "gpio": 2, "label": "D4", "role": "Status LED" },
+    "config_btn": { "gpio": 0, "label": "D3", "role": "Config / factory reset" }
+  }
+}

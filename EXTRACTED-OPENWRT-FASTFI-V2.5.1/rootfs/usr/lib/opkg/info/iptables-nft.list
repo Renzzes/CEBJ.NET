@@ -1,0 +1,5 @@
+/usr/sbin/iptables-restore-translate
+/usr/sbin/iptables-translate
+/usr/sbin/iptables-nft-save
+/usr/sbin/iptables-nft-restore
+/usr/sbin/iptables-nft

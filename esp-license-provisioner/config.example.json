@@ -1,0 +1,15 @@
+{
+  "chip": "esp8266",
+  "baud": 115200,
+  "flash_baud": 460800,
+  "flash_mode": "dout",
+  "flash_freq": "40m",
+  "flash_size": "4MB",
+  "firmware_path": "firmware/coinslot.bin",
+  "plan_default": "standard",
+  "issuer": "KonekSik-Fi",
+  "lifetime_days": 0,
+  "private_key_path": "keys/issuer_ed25519.pem",
+  "public_key_path": "keys/issuer_ed25519.pub.pem",
+  "issue_log_path": "logs/issued_licenses.jsonl"
+}

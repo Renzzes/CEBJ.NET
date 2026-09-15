@@ -1,0 +1,27 @@
+#!/usr/bin/env lua
+-- FastFi V6 API Entry Point
+-- Simple, high-performance router entry point
+
+-- Check if system is ready (set by core-loop.sh)
+local f_ready = io.open("/tmp/fastfi_db_ready", "r")
+if not f_ready then
+    -- If not ready, we can still try to load if it is a fresh install
+    -- But we don't block here.
+else
+    f_ready:close()
+end
+
+local ok, router = pcall(require, "fastfi.api.router")
+if not ok then
+    local json_util = require("fastfi.util.json")
+    print("Content-Type: application/json")
+    print("")
+    print(json_util.encode({
+        status = "error",
+        message = "V6 router not loaded: " .. tostring(router)
+    }))
+    os.exit(1)
+end
+
+-- Dispatch request
+router.dispatch()

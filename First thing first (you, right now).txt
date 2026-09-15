@@ -1,0 +1,17 @@
+First thing first (you, right now):
+
+Open https://login.tailscale.com and create a free account
+Install the Tailscale app on your phone/laptop and sign in
+Open https://login.tailscale.com/admin/settings/keys → Generate an auth key (copy it)
+I’ve already wired Tailscale into Admin (replaces FastFi VPN):
+
+Remote Access page → Install / Start / Stop
+Helper script + API on the router
+Preview updated (Ctrl+F5 to see it)
+Next (on a live Ruijie after you rebuild/flash this firmware):
+
+Admin → Remote Access → Install Tailscale
+Paste the auth key → Start remote
+On your phone (Tailscale on) open the Admin URL shown
+When finished → Stop (free RAM)
+Until you flash a new .bin, the live router still has the old FastFi VPN page — preview shows the new one.

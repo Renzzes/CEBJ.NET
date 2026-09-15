@@ -1,0 +1,31 @@
+CEBJ.NET / KonekSik — License Tools (3 apps)
+============================================
+
+Folder after BUILD-ALL-EXES.bat:
+
+  CEBJ-License-Tools\
+    START-MENU.bat
+    CEBJ-ESP-Flasher\CEBJ-ESP-Flasher.exe
+    CEBJ-License-Generator\CEBJ-License-Generator.exe
+    CEBJ-Buyer-Replacement-Flasher\CEBJ-Buyer-Replacement-Flasher.exe
+
+Each window has a left “Step-by-step” guide you can read anytime.
+
+1) ESP Flasher + License (SELLER)
+   - Flash coinslot firmware + mint + burn KSK license
+   - Exports bundles\KSK-….ksk for the buyer
+   - Keep keys\ private
+
+2) License Generator (SELLER)
+   - Mint a NEW KSK + .ksk only (no flash)
+   - Use after grace (3 replacements) is exhausted
+
+3) Buyer Replacement Flasher (BUYER-SAFE)
+   - Load seller’s .ksk → flash new ESP → write same sealed license
+   - Then Admin → Sub Vendo → Detect ESP32 (counts grace if MAC changed)
+
+Typical flow
+------------
+First sale:  App 1 (Flash + License) → give board + keep .ksk copy
+ESP dies:    App 3 with same .ksk → Detect on router (grace ≤ 3)
+Grace full:  App 2 new license → flash with App 1 or App 3

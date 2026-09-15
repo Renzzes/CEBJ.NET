@@ -1,0 +1,463 @@
+#!/bin/sh
+# FastFi V6 — First Boot Setup (uci-defaults)
+# Placed in /etc/uci-defaults/ — runs once on first boot, auto-deleted on exit 0.
+# Works with both ImageBuilder (packages pre-installed) and stock flash (run DEPENDENCIES.sh first).
+# Last Updated: May 4, 2026
+
+echo "[FastFi] First boot setup starting..."
+
+# ══════════════════════════════════════════════════════
+# STEP 0: Verify & Auto-Install Missing Dependencies
+# ══════════════════════════════════════════════════════
+# On ImageBuilder firmware, all packages are pre-installed.
+# On manual stock flash, this catches anything missed by DEPENDENCIES.sh.
+# If no internet, it skips — the VPN script and System Checker have their own self-healing.
+
+REQUIRED_PKGS="lua lsqlite3 sqlite3-cli curl jq uhttpd uhttpd-mod-ubus cgi-io nodogsplash openvpn-openssl kmod-nft-connlimit tc-tiny kmod-sched-core kmod-sched-cake kmod-ifb sqm-scripts dnsmasq ca-bundle ppp ppp-mod-pppoe kmod-pppoe"
+
+_missing=""
+for pkg in $REQUIRED_PKGS; do
+    if ! opkg list-installed 2>/dev/null | grep -q "^$pkg "; then
+        _missing="$_missing $pkg"
+    fi
+done
+
+if [ -n "$_missing" ]; then
+    echo "[FastFi] Missing packages:$_missing"
+    if ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
+        echo "[FastFi] Internet available — auto-installing missing packages..."
+        # Fix SSL on fresh flash (clock may be wrong)
+        sed -i 's|https://|http://|g' /etc/opkg/distfeeds.conf 2>/dev/null
+        opkg update >/dev/null 2>&1
+        for pkg in $_missing; do
+            opkg install "$pkg" >/dev/null 2>&1
+            if opkg list-installed 2>/dev/null | grep -q "^$pkg "; then
+                echo "[FastFi] ✓ $pkg installed"
+            else
+                echo "[FastFi] ✗ $pkg failed (non-critical, can install later)"
+            fi
+        done
+    else
+        echo "[FastFi] No internet — skipping package install. Use System Checker or DEPENDENCIES.sh later."
+    fi
+else
+    echo "[FastFi] All required packages present."
+fi
+
+# ══════════════════════════════════════════════════════
+# STEP 1: File Permissions
+# ══════════════════════════════════════════════════════
+# Must come before DB init (lua scripts need +x to run)
+
+chmod +x /www/cgi-bin/api 2>/dev/null
+chmod +x /etc/init.d/fastfi 2>/dev/null
+chmod +x /usr/libexec/fastfi/core/*.sh 2>/dev/null
+chmod +x /usr/libexec/fastfi/core/*.lua 2>/dev/null
+chmod +x /usr/libexec/fastfi/jobs/*.sh 2>/dev/null
+chmod +x /usr/libexec/fastfi/jobs/*.lua 2>/dev/null
+chmod +x /usr/libexec/fastfi/services/*.sh 2>/dev/null
+mkdir -p /www/data
+# Ensure OTA log uses a symlink to RAM disk (prevents flash wear and permission issues)
+ln -sf /tmp/fw_progress.log /www/fw_progress.log 2>/dev/null || true
+touch /tmp/fw_progress.log && chmod 666 /tmp/fw_progress.log
+
+# Seed the firmware version file if it doesn't exist yet
+# This is read by the OTA system to determine the current installed version.
+# www/version.txt ships in the image (set at build time), so this normally
+# only fires if that file is absent. Seed from the shipped /VERSION rather
+# than a hardcoded literal, so the fallback never reports a stale "1.0".
+if [ ! -f /www/version.txt ]; then
+    SEED_VER="$(cat /VERSION 2>/dev/null || echo unknown)"
+    echo "$SEED_VER" > /www/version.txt
+    echo "[FastFi] Initialized /www/version.txt to ${SEED_VER}"
+fi
+
+# ══════════════════════════════════════════════════════
+# STEP 2: Initialize Databases
+# ══════════════════════════════════════════════════════
+# Creates tables + seeds config row id=1 + auto-seeds coin_rates
+# Requires: lua + lsqlite3 (from ImageBuilder or DEPENDENCIES.sh)
+
+if which lua >/dev/null 2>&1; then
+    /usr/bin/env lua -e 'require("fastfi.db.init").init()' 2>/dev/null
+    echo "[FastFi] Databases initialized."
+else
+    echo "[FastFi] WARNING: lua not found — DB init skipped. Run DEPENDENCIES.sh first."
+fi
+
+
+if [ -f /etc/fastfi/network_prepared ]; then
+    echo "[FastFi] Pre-baked network config detected; skipping STEP 3/4/5."
+else
+
+
+
+# ══════════════════════════════════════════════════════
+# STEP 3: Network — br-lan portal IP (10.0.0.1/24)
+# ══════════════════════════════════════════════════════
+# FastFi's captive portal, nodogsplash, DHCP pool, and sub-vendo gateway all
+# assume br-lan = 10.0.0.1/24. OpenWrt board detection brings br-lan up at the
+# mt7621 default 192.168.1.1, which makes the splash redirect to 10.0.0.1
+# dead-end — the captive portal is unreachable. Fix the IP on first boot
+# WITHOUT hardcoding bridge ports: board detection already picked the right
+# ones (lan1..lan4 on DSA mt7621 like ZBT-WG3526 / EW1200G Pro). The sub-vendo
+# port-rewrite (subvendo.apply_network_public) only fires when a vendo VLAN is
+# configured, so it won't clobber this on DSA boards. uci-defaults run once
+# and self-delete on exit 0 (first-boot only),
+# so a later admin-panel IP change is never overwritten. Skip if a custom IP
+# is already set (pre-bake or operator).
+#
+# CRITICAL (25.12.x): config_generate switched the lan address from a scalar
+#   option ipaddr '192.168.1.1'   + option netmask '255.255.255.0'   (24.10.x)
+# to a CIDR list
+#   list ipaddr '192.168.1.1/24'                                   (25.12.x)
+# `uci get network.lan.ipaddr` therefore returns "192.168.1.1/24" on 25.12.x,
+# which is neither empty nor "192.168.1.1", so the old equality check was FALSE
+# and STEP 3 silently skipped — br-lan stayed at 192.168.1.1 while DHCP handed
+# out 10.0.0.x, so the portal + admin were unreachable. Normalize the read to
+# the bare IPv4 (strip CIDR prefix + whitespace) for the default check, then
+# rewrite in the SAME form config_generate used (CIDR list on 25.12.x, scalar
+# + netmask on 24.10.x) so each version's netifd reads it natively.
+_CUR_LAN_IP=$(uci -q get network.lan.ipaddr 2>/dev/null)
+_CUR_BARE=$(printf '%s' "$_CUR_LAN_IP" | tr -d ' \n' | sed 's|/.*||')
+if [ -z "$_CUR_BARE" ] || [ "$_CUR_BARE" = "192.168.1.1" ]; then
+    uci set network.lan.proto='static'
+    uci -q delete network.lan.ipaddr
+    case "$_CUR_LAN_IP" in
+        */*)   # 25.12.x CIDR-list form
+            uci -q delete network.lan.netmask 2>/dev/null
+            uci add_list network.lan.ipaddr='10.0.0.1/24'
+            ;;
+        *)     # 24.10.x scalar form
+            uci set network.lan.ipaddr='10.0.0.1'
+            uci set network.lan.netmask='255.255.255.0'
+            ;;
+    esac
+    uci commit network
+    echo "[FastFi] Set br-lan to 10.0.0.1/24 (portal gateway IP)."
+else
+    echo "[FastFi] br-lan already at $_CUR_BARE — leaving as-is."
+fi
+
+# ══════════════════════════════════════════════════════
+# STEP 4: DHCP — Full /24 Range
+# ══════════════════════════════════════════════════════
+# start=2 → first DHCP address is 10.0.0.2
+# limit=252 → last DHCP address is 10.0.0.253
+# Total: 252 clients (10.0.0.1 = gateway, 10.0.0.255 = broadcast)
+
+uci set dhcp.lan.start='2'
+uci set dhcp.lan.limit='252'
+uci set dhcp.lan.leasetime='12h'
+uci commit dhcp
+
+# FastFi Shield: wire the dnsmasq include dir so /etc/dnsmasq.d/*.conf is loaded.
+# The blocking engine writes /etc/dnsmasq.d/fastfi-block.conf and HUPs dnsmasq;
+# this just makes sure dnsmasq is told to read that dir from first boot.
+mkdir -p /etc/dnsmasq.d /etc/fastfi/security
+if ! uci -q get dhcp.@dnsmasq[0].confdir 2>/dev/null | grep -q "/etc/dnsmasq.d"; then
+    uci add_list dhcp.@dnsmasq[0].confdir='/etc/dnsmasq.d'
+    uci commit dhcp
+fi
+
+# ══════════════════════════════════════════════════════
+# STEP 5: Firewall — Masquerade + Access Rules
+# ══════════════════════════════════════════════════════
+
+# Enable IP Forwarding (Critical for routing)
+sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
+
+# Ensure firewall zones exist: lan (br-lan) and wan (network.wan)
+# Existing routers with these zones are untouched.
+
+_lan_zone_exists=$(uci show firewall 2>/dev/null | grep -c "network='.*lan.*'" || echo 0)
+if [ "$_lan_zone_exists" = "0" ]; then
+    uci add firewall zone
+    uci set firewall.@zone[-1].name='lan'
+    uci set firewall.@zone[-1].network='lan'
+    uci set firewall.@zone[-1].input='ACCEPT'
+    uci set firewall.@zone[-1].output='ACCEPT'
+    uci set firewall.@zone[-1].forward='ACCEPT'
+    echo "[FastFi] Created firewall LAN zone"
+fi
+
+if uci -q get network.wan >/dev/null 2>&1; then
+    _wan_zone_exists=$(uci show firewall 2>/dev/null | grep -c "network='.*wan.*'" || echo 0)
+    if [ "$_wan_zone_exists" = "0" ]; then
+        uci add firewall zone
+        uci set firewall.@zone[-1].name='wan'
+        uci set firewall.@zone[-1].network='wan'
+        uci set firewall.@zone[-1].input='REJECT'
+        uci set firewall.@zone[-1].output='ACCEPT'
+        uci set firewall.@zone[-1].forward='REJECT'
+        uci set firewall.@zone[-1].masq='1'
+        echo "[FastFi] Created firewall WAN zone for network.wan"
+    fi
+fi
+
+# Ensure forwarding from lan to wan
+if ! uci show firewall 2>/dev/null | grep -q "src='lan'.*dest='wan'\|dest='wan'.*src='lan'"; then
+    uci add firewall forwarding
+    uci set firewall.@forwarding[-1].src='lan'
+    uci set firewall.@forwarding[-1].dest='wan'
+    echo "[FastFi] Enabled LAN→WAN forwarding"
+fi
+
+# Apply masquerade on all existing zones
+for z in $(uci -q show firewall 2>/dev/null | grep '=zone' | cut -d. -f2 | cut -d= -f1); do
+    uci set firewall.$z.masq='1'
+done
+
+# Helper: add firewall rule only if it doesn't already exist
+add_fw_rule() {
+    local name="$1" port="$2" proto="$3"
+    if ! uci show firewall 2>/dev/null | grep -q "\.name='$name'"; then
+        uci add firewall rule
+        uci set firewall.@rule[-1].name="$name"
+        uci set firewall.@rule[-1].src='lan'
+        uci set firewall.@rule[-1].dest_port="$port"
+        uci set firewall.@rule[-1].proto="$proto"
+        uci set firewall.@rule[-1].target='ACCEPT'
+    fi
+}
+
+add_fw_rule 'Allow-SSH-LAN' '22' 'tcp'
+add_fw_rule 'Allow-HTTP-LAN' '80' 'tcp'
+add_fw_rule 'Allow-HTTPS-LAN' '443' 'tcp'
+
+uci commit firewall
+
+fi
+
+# ══════════════════════════════════════════════════════
+# STEP 6: Wireless — Enable Radios + Set SSIDs
+# ══════════════════════════════════════════════════════
+# OpenWrt ships wireless DISABLED by default — must enable it.
+#
+# CRITICAL (25.12.x): the `disabled` flag migrated from the wifi-*device*
+# section to the wifi-*iface* section. In 24.10.x mac80211.uc emitted
+#   set ${s}.disabled='1'        # on the wifi-device
+# so enabling the device (the loop below) brought its ifaces up and the
+# public SSID broadcast. In 25.12.x it emits
+#   set ${si}.disabled='1'       # on the wifi-iface (when the board has no
+#                                # wlan defaults — true for the EDUP EP-RT2983)
+# so enabling the device is a NO-OP and the default AP ifaces stay down.
+# Symptom: only a manually-created iface (espwifi) broadcasts, i.e. just
+# "FastFi-Private" and no public "FastFi PisoWiFi". Clear `disabled` on BOTH
+# the device and every LAN-bound default iface so the public SSID broadcasts
+# on all radios. (`disabled='0'` is unambiguous; absent also means enabled.)
+
+# On Wi-Fi 6 boards (mt7915/mt7975) the radios can take a few seconds to load
+# firmware and appear in /etc/config/wireless via the ieee80211 hotplug. Wait
+# briefly so the enable/rename below actually sees them — otherwise the loops
+# find nothing and only the espwifi fallback (with a possibly-wrong radio
+# name) would broadcast. Bounded; if firmware never loads we still proceed.
+_wait=0
+while [ -z "$(uci show wireless 2>/dev/null | grep '=wifi-device')" ] && [ "$_wait" -lt 15 ]; do
+    sleep 1
+    _wait=$((_wait + 1))
+done
+
+for radio in $(uci show wireless 2>/dev/null | grep '=wifi-device' | cut -d'=' -f1); do
+    uci set "$radio.disabled"='0'
+
+    # Force the 2.4 GHz radio to legacy (802.11 b/g, htmode=NOHT — no HT/VHT/HE)
+    # so 2.4 GHz-only clients reliably associate — above all the ESP8266 coinslot
+    # (802.11 b/g/n, 2.4 GHz-only, NO ax). Wi-Fi 6 (HE) mode on the 2.4 GHz radio
+    # is backwards-compatible on paper, but many ESP8266 firmwares fail to join
+    # an ax AP, which would leave coinslots unable to connect to FastFi-Private.
+    # The 5 GHz radio keeps HE/ax for customer throughput; 2.4 GHz is the
+    # coinslot / legacy band where 802.11g's 54 Mbps is more than enough.
+    # legacy_rates advertises the 802.11b base rates too for the oldest clients.
+    # Identify the 2.4 GHz radio via band='2g' (25.12.x + 24.10.x), with hwmode
+    # 11g/11b as a fallback for older configs. No-op on the 5 GHz radio and on
+    # 24.10.x boards (legacy mode there is still valid, just a no-op change).
+    _band=$(uci -q get "${radio}".band 2>/dev/null)
+    _hw=$(uci -q get "${radio}".hwmode 2>/dev/null)
+    if [ "$_band" = "2g" ] || [ "$_hw" = "11g" ] || [ "$_hw" = "11b" ]; then
+        uci set "${radio}".htmode='NOHT'
+        uci set "${radio}".legacy_rates='1'
+    fi
+done
+
+# Enable + rename the default LAN-bound AP ifaces (one per radio).
+for iface in $(uci show wireless 2>/dev/null | grep "\.network='lan'" | cut -d'.' -s -f2); do
+    uci set wireless."$iface".disabled='0'
+    current_ssid=$(uci -q get wireless."$iface".ssid)
+    if [ "$current_ssid" = "OpenWrt" ] || [ -z "$current_ssid" ]; then
+        uci set wireless."$iface".ssid='FastFi PisoWiFi'
+        uci set wireless."$iface".encryption='none'
+    fi
+done
+
+# Private WiFi for ESP coinslots (named section for reliable uci access)
+# Default password MUST match ESP firmware DEFAULT_PASS ("12345678")
+# so coinslots auto-connect on fresh install. Change via admin panel later.
+if ! uci -q get wireless.espwifi >/dev/null 2>&1; then
+    FIRST_RADIO=$(uci show wireless 2>/dev/null | grep '=wifi-device' | cut -d'=' -f1 | cut -d'.' -f2 | head -n1)
+    [ -z "$FIRST_RADIO" ] && FIRST_RADIO='radio0'
+    uci set wireless.espwifi=wifi-iface
+    uci set wireless.espwifi.device="$FIRST_RADIO"
+    uci set wireless.espwifi.mode='ap'
+    uci set wireless.espwifi.network='lan'
+    uci set wireless.espwifi.ssid='FastFi-Private'
+    uci set wireless.espwifi.encryption='psk2'
+    uci set wireless.espwifi.key='12345678'
+    uci set wireless.espwifi.hidden='0'
+fi
+
+uci commit wireless
+
+# Save WiFi config to database (for admin dashboard display)
+if which sqlite3 >/dev/null 2>&1 && [ -f /www/data/bindcode.db ]; then
+    ESP_PASS=$(uci -q get wireless.espwifi.key 2>/dev/null || echo '12345678')
+    sqlite3 /www/data/bindcode.db "UPDATE config SET wifi_public_ssid='FastFi PisoWiFi', wifi_private_ssid='FastFi-Private', wifi_private_pass='$ESP_PASS' WHERE id=1;" 2>/dev/null
+fi
+
+# ══════════════════════════════════════════════════════
+# STEP 7: Nodogsplash — Captive Portal
+# ══════════════════════════════════════════════════════
+
+GW_IP="10.0.0.1"
+if uci -q get nodogsplash.@nodogsplash[0] >/dev/null 2>&1; then
+    uci set nodogsplash.@nodogsplash[0].gatewayinterface='br-lan'
+    uci set nodogsplash.@nodogsplash[0].gatewayname='FastFi Portal'
+    uci set nodogsplash.@nodogsplash[0].sessiontimeout='0'
+    uci set nodogsplash.@nodogsplash[0].authidletimeout='0'
+    uci set nodogsplash.@nodogsplash[0].preauthidletimeout='30'
+    uci set nodogsplash.@nodogsplash[0].checkinterval='600'
+    uci set nodogsplash.@nodogsplash[0].maxclients='250'
+
+    # CRITICAL: allow portal/API access before authentication
+    uci del_list nodogsplash.@nodogsplash[0].preauthenticated_users="allow tcp port 80 to $GW_IP" 2>/dev/null
+    uci del_list nodogsplash.@nodogsplash[0].preauthenticated_users="allow tcp port 443 to $GW_IP" 2>/dev/null
+    uci add_list nodogsplash.@nodogsplash[0].preauthenticated_users="allow tcp port 80 to $GW_IP"
+    uci add_list nodogsplash.@nodogsplash[0].preauthenticated_users="allow tcp port 443 to $GW_IP"
+
+    # CRITICAL: users_to_router defaults to BLOCK. Without udp 67 (DHCP) and
+    # 53 (DNS), unauthenticated clients never complete DHCP and stay stuck at
+    # "Obtaining IP address". Add them idempotently (del_list first to avoid dupes).
+    for _rule in \
+        "allow udp port 67" \
+        "allow udp port 53" \
+        "allow tcp port 53" \
+        "allow tcp port 80" \
+        "allow tcp port 443"; do
+        uci del_list nodogsplash.@nodogsplash[0].users_to_router="$_rule" 2>/dev/null
+        uci add_list nodogsplash.@nodogsplash[0].users_to_router="$_rule"
+    done
+
+    uci commit nodogsplash
+
+    # Create splash page — instant redirect to captive portal
+    mkdir -p /etc/nodogsplash/htdocs
+    cat << 'SPLASH' > /etc/nodogsplash/htdocs/splash.html
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="refresh" content="0;url=http://10.0.0.1/">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FastFi Portal</title>
+<script>window.location.href="http://10.0.0.1/";</script>
+</head>
+<body style="background:#0f172a;color:#f8fafc;font-family:sans-serif;text-align:center;padding:50px;">
+<h2>Redirecting to portal...</h2>
+<p>If you are not redirected automatically, <a href="http://10.0.0.1/" style="color:#3b82f6;">click here</a>.</p>
+<noscript>
+<p style="margin-top:30px;">Your browser has no JavaScript. Connect below:</p>
+<form action="http://10.0.0.1/cgi-bin/api" method="get" style="margin:20px auto;max-width:420px">
+<input type="hidden" name="action" value="classic">
+<input type="hidden" name="mode" value="voucher">
+<input type="text" name="code" placeholder="Voucher code" required style="font-size:18px;padding:12px;width:70%;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#fff">
+<button type="submit" style="font-size:18px;padding:12px 24px;margin-top:12px;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer">Go Online</button>
+</form>
+<form action="http://10.0.0.1/cgi-bin/api" method="get" style="margin:15px">
+<input type="hidden" name="action" value="classic">
+<input type="hidden" name="mode" value="resume">
+<button type="submit" style="font-size:16px;padding:10px 20px;border-radius:6px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer">Resume my paused time</button>
+</form>
+</noscript>
+</body>
+</html>
+SPLASH
+
+    echo "[FastFi] Nodogsplash configured for br-lan with portal redirect"
+else
+    echo "[FastFi] WARNING: Nodogsplash not available — run DEPENDENCIES.sh and reboot"
+fi
+
+# ══════════════════════════════════════════════════════
+# STEP 9: Audio File Placeholders
+# ══════════════════════════════════════════════════════
+
+mkdir -p /www/audio
+if [ -f /www/audio/insert.mp3 ]; then
+    [ ! -f /www/audio/coin.mp3 ] && cp /www/audio/insert.mp3 /www/audio/coin.mp3
+    [ ! -f /www/audio/success.mp3 ] && cp /www/audio/insert.mp3 /www/audio/success.mp3
+fi
+
+# ══════════════════════════════════════════════════════
+# STEP 10: Cron Jobs
+# ══════════════════════════════════════════════════════
+
+mkdir -p /etc/crontabs
+if [ -f /etc/crontabs/root.template ]; then
+    cp /etc/crontabs/root.template /etc/crontabs/root
+    chmod 0600 /etc/crontabs/root
+fi
+
+# ══════════════════════════════════════════════════════
+# STEP 11: Enable All Services
+# ══════════════════════════════════════════════════════
+# These will start on the NEXT boot (or current boot if services init hasn't run yet)
+
+# uhttpd: do not follow symlinks pointing outside the docroot. /www/data is a
+# symlink into /etc/fastfi/data (see fastfi-data-dir.sh) so the SQLite DBs
+# (vouchers / licence key / sessions / sales) are not downloadable as static
+# files by any LAN client. The kernel still resolves the link for Lua open()s.
+uci set uhttpd.main.no_symlinks='1'
+uci commit uhttpd
+/etc/init.d/uhttpd enable 2>/dev/null
+/etc/init.d/nodogsplash enable 2>/dev/null
+/etc/init.d/fastfi enable 2>/dev/null
+/etc/init.d/dnsmasq enable 2>/dev/null
+/etc/init.d/firewall enable 2>/dev/null
+/etc/init.d/dropbear enable 2>/dev/null
+/etc/init.d/cron enable 2>/dev/null
+/etc/init.d/openvpn enable 2>/dev/null
+
+# ══════════════════════════════════════════════════════
+# STEP 12: Runtime Directories
+# ══════════════════════════════════════════════════════
+
+mkdir -p /tmp/fastfi_state
+mkdir -p /tmp/fastfi_sessions
+mkdir -p /www/data
+
+# ══════════════════════════════════════════════════════
+# STEP 13: Start Services Now
+# ══════════════════════════════════════════════════════
+# Services were enabled above but may not be running yet on first boot.
+# Start them now so the system is fully operational immediately.
+
+/etc/init.d/firewall restart >/dev/null 2>&1
+/etc/init.d/dnsmasq restart >/dev/null 2>&1
+/etc/init.d/uhttpd restart >/dev/null 2>&1
+/etc/init.d/nodogsplash restart >/dev/null 2>&1
+/etc/init.d/cron restart >/dev/null 2>&1
+/etc/init.d/openvpn restart >/dev/null 2>&1
+/etc/init.d/openvpn start 2>/dev/null
+
+# Apply FastFi Shield once first boot is up: renders the block config + nft
+# ruleset and self-seeds the JSON lists + dnsmasq confdir (idempotent).
+/usr/bin/env lua /usr/libexec/fastfi/core/fastfi-shield.lua >/dev/null 2>&1
+/usr/bin/env lua /usr/libexec/fastfi/core/fastfi-starlink-sync.lua >/dev/null 2>&1
+
+# Start FastFi daemon (core-loop + captive-trigger)
+if [ -x /etc/init.d/fastfi ]; then
+    /etc/init.d/fastfi start >/dev/null 2>&1
+fi
+
+echo "[FastFi] First boot setup complete. All services started."
+
+exit 0

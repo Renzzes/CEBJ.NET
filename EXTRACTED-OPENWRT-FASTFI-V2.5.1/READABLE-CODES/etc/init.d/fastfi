@@ -1,0 +1,49 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+USE_PROCD=1
+
+start_service() {
+    # Move SQLite data out of the uhttpd docroot BEFORE db.init (config.lua
+    # mkdirs /www/data on first use and would recreate a real, web-served dir).
+    /usr/libexec/fastfi/core/fastfi-data-dir.sh 2>/dev/null || true
+    # Initialize Databases
+    /usr/bin/env lua -e 'require("fastfi.db.init").init()'
+    
+    # FastFi captive portal trigger daemon
+    procd_open_instance
+    procd_set_param command /usr/libexec/fastfi/core/captive-trigger.sh
+    procd_set_param respawn
+    procd_set_param respawn_threshold 5
+    procd_set_param respawn_timeout 2
+    procd_close_instance
+
+    # FastFi core controller loop
+    procd_open_instance
+    procd_set_param command /usr/libexec/fastfi/core/core-loop.sh
+    procd_set_param respawn
+    procd_set_param respawn_threshold 5
+    procd_set_param respawn_timeout 2
+    procd_close_instance
+
+    # FastFi quota sync daemon
+    procd_open_instance
+    procd_set_param command /usr/bin/env lua /usr/libexec/fastfi/core/fastfi-quota-sync.lua
+    procd_set_param respawn
+    procd_set_param respawn_threshold 5
+    procd_set_param respawn_timeout 2
+    procd_close_instance
+}
+
+stop_service() {
+    killall captive-trigger.sh 2>/dev/null
+    killall core-loop.sh 2>/dev/null
+    killall fastfi-quota-sync.lua 2>/dev/null
+}
+
+restart() {
+    stop
+    sleep 2
+    start
+}

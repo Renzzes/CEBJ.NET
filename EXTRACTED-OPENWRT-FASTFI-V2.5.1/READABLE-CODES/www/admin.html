@@ -1,0 +1,1765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FastFi Admin Panel</title>
+<meta name="description" content="FastFi WiFi Vendo administration dashboard — manage sessions, rates, vouchers, and network settings.">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- devtools guard (anti-inspection) — operator bypass: append ?ddtk=fastfi-admin -->
+<script>window.FASTFI_DDT_MODE='admin';</script>
+<script src="./lib/disable-devtool.min.js?v=0.3.9"></script>
+<script src="./lib/devtool-guard.js?v=1"></script>
+<link rel="shortcut icon" href="./image/fastfi_logo.png" type="image/x-icon">
+<link rel="stylesheet" href="./css/bootstrap.min.css">
+<link rel="stylesheet" href="./css/admin.css?v=10">
+<script src="./icons.js?v=19"></script>
+<script src="./chart.min.js"></script>
+<script src="./lib/qrcode.js?v=1"></script>
+</head>
+
+<body>
+
+<!-- Password Recovery: licence-key tail -->
+<div id="recoveryModal" class="modal-overlay" style="z-index:9999;">
+    <div class="modal-card" style="max-width:420px;">
+        <h3 style="margin-bottom:8px;">Reset Admin Password</h3>
+        <p class="text-muted" style="font-size:13px; margin-bottom:14px;">
+            Enter the <strong>last two groups</strong> of this router's licence key.
+        </p>
+        <input type="text" class="form-control mb-2" id="licenseTail"
+               placeholder="XXXX-XXXX" autocomplete="off" spellcheck="false"
+               style="text-align:center; letter-spacing:2px; text-transform:uppercase;">
+        <div class="form-text mb-3" style="font-size:12px;">
+            Example: for <code>STD-7K4M-9QP2-A83B-6RC4</code> enter <code>A83B-6RC4</code>.
+            The password resets to <code>admin123</code> and you must set a new one straight away.
+        </div>
+        <div id="recoveryMsg" class="mb-2" style="font-size:13px;"></div>
+        <div class="d-flex gap-2 justify-content-end">
+            <button onclick="closeModal()" class="btn btn-outline-secondary">Cancel</button>
+            <button id="btnRecover" onclick="submitRecovery()" class="btn btn-primary">Reset Password</button>
+        </div>
+    </div>
+</div>
+
+<!-- Forced password change after a recovery reset -->
+<div id="forceChangeModal" class="modal-overlay" style="z-index:10000;">
+    <div class="modal-card" style="max-width:420px;">
+        <h3 style="margin-bottom:8px;">Set a New Password</h3>
+        <p class="text-muted" style="font-size:13px; margin-bottom:14px;">
+            This router is still using the default password after a recovery reset.
+            Choose a new one before continuing.
+        </p>
+        <input type="password" class="form-control mb-2" id="forceNewPass" placeholder="New password" autocomplete="new-password">
+        <input type="password" class="form-control mb-2" id="forceNewPass2" placeholder="Confirm new password" autocomplete="new-password">
+        <div id="forceChangeMsg" class="mb-2" style="font-size:13px;"></div>
+        <div class="d-flex justify-content-end">
+            <button id="btnForceChange" onclick="submitForcedChange()" class="btn btn-primary">Save Password</button>
+        </div>
+    </div>
+</div>
+
+<header class="d-flex w-100 justify-content-between align-items-center p-3 bg-white shadow-sm border-bottom z-3">
+
+    <div style="display:flex; align-items:center;">
+        <button class="btn btn-light me-2 d-md-none" onclick="toggleSidebar()"><i data-icon="menu" data-size="22"></i></button>
+        <span><i data-icon="shield" data-size="20"></i> FastFi Admin</span>
+    </div>
+    <button id="themeToggle" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2" onclick="toggleTheme()" title="Theme Selection">
+        <i data-icon="monitor" data-size="16"></i> <span id="themeToggleText" style="font-size: 11px; text-transform: uppercase;">Auto</span>
+    </button>
+</header>
+
+<!-- Sidebar Overlay -->
+<div class="sidebar-overlay bg-dark opacity-50 position-fixed w-100 h-100 top-0 start-0 d-none z-2" id="sidebarOverlay" onclick="toggleSidebar()" style="transition: opacity 0.3s; z-index: 1040;"></div>
+
+<div id="loginSection" class="vh-100 d-flex align-items-center justify-content-center w-100 position-fixed top-0 start-0 z-3" style="min-height: 100vh;">
+    <div class="login-card w-100 m-3" style="max-width:420px; position: relative; z-index: 1;">
+        <h3 class="login-title">
+            <i data-icon="shield" data-size="28" style="color: #818cf8;"></i> 
+            FastFi Admin
+        </h3>
+        <div class="input-group mb-4 login-input-wrapper">
+            <input type="password" class="form-control login-input" style="border:none !important; background: transparent !important;" id="adminPass" placeholder="Enter Password" onkeydown="if(event.key==='Enter')login()" autofocus>
+            <button class="btn" style="color: #94a3b8; border:none; background: transparent;" type="button" onclick="togglePass()" title="Show/Hide Password"><i data-icon="eye" data-size="20"></i></button>
+        </div>
+        <button class="btn btn-primary btn-lg w-100 login-btn" onclick="login()">
+            <i data-icon="lock" data-size="18" style="margin-right: 6px; position: relative; top: -1px;"></i> Access Dashboard
+        </button>
+        <div class="text-center mt-4">
+            <a href="#" class="login-forgot" onclick="startRecovery(); return false;">
+                <i data-icon="shield" data-size="14" style="margin-right: 4px; position: relative; top: -1px;"></i> Forgot Password?
+            </a>
+        </div>
+    </div>
+</div> <!-- Close loginSection -->
+
+<div id="adminPanel" class="d-flex vh-100 hidden w-100">
+
+<div class="sidebar d-flex flex-column p-3 flex-shrink-0" style="width:250px;overflow-y:auto;">
+
+<span class="mt-3 mb-2 small text-uppercase text-secondary fw-bold">Overview</span>
+<button onclick="showDashboard();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="layout-dashboard" data-size="16"></i> Dashboard</button>
+<button onclick="showSales();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="trending-up" data-size="16"></i> Sales</button>
+
+<span class="mt-3 mb-2 small text-uppercase text-secondary fw-bold">Management</span>
+<button onclick="showRates();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="coins" data-size="16"></i> Coin Rates</button>
+<button onclick="showSessions();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="users" data-size="16"></i> Sessions</button>
+<button onclick="showVouchers();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="ticket" data-size="16"></i> Vouchers</button>
+<button onclick="showGcash();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="smartphone" data-size="16"></i> GCash</button>
+
+
+<span class="mt-3 mb-2 small text-uppercase text-secondary fw-bold">Network</span>
+<button onclick="showNetwork();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="globe" data-size="16"></i> Network</button>
+<button onclick="showWiFi();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="wifi" data-size="16"></i> WiFi SSID</button>
+
+<span class="mt-3 mb-2 small text-uppercase text-secondary fw-bold">System</span>
+<button onclick="showSettings();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="settings" data-size="16"></i> Settings</button>
+<button onclick="showRemoteAccess();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="cloud" data-size="16"></i> Remote Access</button>
+<button onclick="showESPSlots();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="cpu" data-size="16"></i> Sub Vendo</button>
+<button onclick="showUpdate();closeSidebarMobile()" class="btn text-start w-100 mb-1" ><i data-icon="refresh-cw" data-size="16"></i> OTA Update</button>
+
+<hr class="sidebar-divider">
+<button onclick="confirmReboot()" class="btn text-start w-100 mb-1 sidebar-btn"><i data-icon="power" data-size="16"></i> Reboot</button>
+<button onclick="logout()" class="btn text-start w-100 mb-1" ><i data-icon="log-out" data-size="16"></i> Logout</button>
+</div>
+
+<div class="flex-grow-1 p-4 overflow-auto">
+
+<!-- DASHBOARD -->
+<div id="dashboardSection">
+
+<div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 12px;">
+    <h3 class="section-title">System & Clients</h3>
+    <div class="d-flex gap-2">
+        <label class="form-check form-switch d-flex align-items-center gap-2 mb-0 ff-toggle" style="cursor:pointer;">
+            <input class="form-check-input" type="checkbox" id="autoRefreshToggle" onchange="toggleAutoRefresh()" checked>
+            <span class="form-check-label" style="font-size:13px;margin:0;">Auto-refresh</span>
+        </label>
+        <button onclick="loadSystemStatus()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="refreshBtn"><i data-icon="refresh-cw" data-size="12"></i> Refresh</button>
+    </div>
+</div>
+
+
+<div class="row g-3 mb-4">
+    <!-- Sales Card -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(16, 185, 129, 0.1);color:#10b981;">
+                    <span style="font-size: 22px; font-weight: bold; line-height: 1;">₱</span>
+                </div>
+                <div style="min-width:0; overflow:hidden; width:100%;">
+                    <div class="d-flex justify-content-between align-items-end mb-1">
+                        <div>
+                            <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:10px;letter-spacing:0.5px;">Sales Today</div>
+                            <h4 class="mb-0 fw-bold text-truncate" style="color:#10b981;" id="sysSalesToday">₱0</h4>
+                        </div>
+                        <div class="text-end">
+                            <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:10px;letter-spacing:0.5px;">This Month</div>
+                            <h5 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary);" id="sysSalesMonth">₱0</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Connected Card -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(34, 197, 94, 0.1);color:#22c55e;">
+                    <i data-icon="wifi" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Connected</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="connectedCount">0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Total Clients Card -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(99, 102, 241, 0.1);color:#6366f1;">
+                    <i data-icon="users" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Total Clients</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="totalClients">0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Uptime Card -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(245, 158, 11, 0.1);color:#f59e0b;">
+                    <i data-icon="clock" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Uptime</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="sysUptime">-</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="zap" data-size="18"></i> Quick Actions</h5></div>
+<div class="card-body">
+<div class="d-flex gap-2 flex-wrap mt-3">
+    <button id="btnSystemUpdate" onclick="showUpdate()" class="btn btn-info d-flex align-items-center gap-2 text-white" style="border: 2px solid white !important;"><i data-icon="refresh-cw" data-size="16"></i> System Update</button>
+    <button onclick="showSales()" class="btn btn-primary d-flex align-items-center gap-2"><i data-icon="trending-up" data-size="16"></i> View Sales</button>
+    <button onclick="showSessions()" class="btn btn-primary d-flex align-items-center gap-2"><i data-icon="users" data-size="16"></i> View Sessions</button>
+    <button onclick="showVouchers()" class="btn btn-success d-flex align-items-center gap-2"><i data-icon="ticket" data-size="16"></i> Generate Vouchers</button>
+    <button onclick="showESPSlots()" class="btn btn-info d-flex align-items-center gap-2 text-white"><i data-icon="cpu" data-size="16"></i> Sub Vendo</button>
+    <button onclick="showNetwork()" class="btn btn-warning d-flex align-items-center gap-2"><i data-icon="globe" data-size="16"></i> Network Config</button>
+    <button onclick="confirmReboot()" class="btn btn-danger d-flex align-items-center gap-2"><i data-icon="power" data-size="16"></i> Reboot Router</button>
+</div>
+</div>
+
+</div>
+
+<!-- Recent Activity Log -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="clock" data-size="18"></i> Recent Activity</h5>
+    <button onclick="clearActivityLog()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="trash-2" data-size="14"></i> Clear</button>
+</div>
+<div class="card-body p-0">
+    <div id="activityLog" style="max-height:300px;overflow-y:auto;padding:1rem;">
+        <div class="text-center text-muted py-4" style="font-size:13px;">
+            <i data-icon="inbox" data-size="24"></i>
+            <p class="mb-0 mt-2">No recent activity</p>
+        </div>
+    </div>
+</div>
+</div>
+
+</div>
+<!-- DASHBOARD END -->
+
+<!-- RATES -->
+<div id="ratesSection" class="hidden">
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="coins" data-size="18"></i> Coin Rates</h5>
+    <div class="card-header-actions">
+        <button class="btn btn-danger btn-sm" onclick="deleteAllRates()"><i data-icon="trash-2" data-size="14"></i> Delete All</button>
+        <button class="btn btn-primary btn-sm" onclick="addRateRow()"><i data-icon="plus" data-size="14"></i> Add</button>
+        <button class="btn btn-primary btn-sm" onclick="saveRates()"><i data-icon="save" data-size="14"></i> Save Rates</button>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+<th>Price (₱)</th>
+<th>Time (Hrs)</th>
+<th>Time (Min)</th>
+<th>DL Limit (Mbps)</th>
+<th>UL Limit (Mbps)</th>
+<th>Pause Limit</th>
+<th>Validity (Hrs)</th>
+<th>Data (MB)</th>
+<th style="width: 60px;">Action</th>
+</tr>
+</thead>
+<tbody id="ratesTable"></tbody>
+</table></div>
+</div>
+</div>
+
+<!-- REMOVED TO BALANCE -->
+<!-- SESSIONS -->
+<div id="sessionsSection" class="hidden">
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title"><i data-icon="users" data-size="18"></i> Connected Users</h5>
+    <div class="card-header-actions">
+        <button onclick="loadClients()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+<th>Hostname</th>
+<th>IP Address</th>
+<th>MAC Address</th>
+<th>Data (DL/UL)</th>
+<th>Speed Limit</th>
+<th>Pause Limit</th>
+<th>Time Remaining</th>
+<th>Expiration</th>
+<th>Status</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="clientTable"></tbody>
+</table></div>
+</div>
+
+<!-- Unauthenticated Clients (WiFi Discovery) -->
+<div class="card shadow-sm mb-4 border-0" style="margin-top:16px;">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title"><i data-icon="wifi" data-size="18"></i> Unauthenticated Clients</h5>
+    <div class="card-header-actions">
+        <span class="text-muted" style="font-size:12px;">Devices connected to WiFi but without active time</span>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+<th>Hostname</th>
+<th>IP Address</th>
+<th>MAC Address</th>
+<th>Status</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="unauthTable"></tbody>
+</table></div>
+</div> <!-- End unauthTable container -->
+
+<!-- Session History -->
+<div class="card shadow-sm mb-4 border-0" style="margin-top:16px;">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title"><i data-icon="clock" data-size="18"></i> Session History</h5>
+    <div class="card-header-actions">
+        <button onclick="loadSessionHistory()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"><i data-icon="refresh-cw" data-size="12"></i> Refresh</button>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+<th>Time</th>
+<th>Device</th>
+<th>MAC Address</th>
+<th>Event</th>
+<th>Remaining</th>
+<th>Triggered By</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody id="sessionHistoryTable"></tbody>
+</table></div>
+</div>
+
+
+<!-- Blocked Clients -->
+<div class="card shadow-sm mb-4 border-0" style="margin-top:16px;">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title"><i data-icon="slash" data-size="18"></i> Blocked Devices</h5>
+    <div class="card-header-actions">
+        <span class="text-muted" style="font-size:12px;">Devices completely banned from network access</span>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark"><tr><th>Hostname</th><th>IP Address</th><th>MAC Address</th><th>Data (DL/UL)</th><th>Status</th><th style="width:120px;">Actions</th></tr></thead>
+<tbody id="blocklistTable"></tbody>
+</table></div>
+</div>
+
+</div> <!-- End sessionsSection -->
+
+<!-- MODAL PANELS -->
+<div id="editPanelOverlay" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3>Edit Client</h3>
+            <button class="modal-close" onclick="cancelEdit()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>
+        <p class="text-muted" style="font-size:13px; margin-top:-10px; margin-bottom:15px;">MAC: <strong id="editMac" class="text-dark" style="font-family:monospace;"></strong></p>
+
+        <div style="display:flex; gap:12px; margin-bottom:12px;">
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold">Days</label>
+                <input type="number" class="form-control" id="editDays" value="0">
+            </div>
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold">Hours</label>
+                <input type="number" class="form-control" id="editHours" value="0">
+            </div>
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold">Minutes</label>
+                <input type="number" class="form-control" id="editMinutes" value="0">
+            </div>
+        </div>
+
+        <div style="display:flex; gap:12px; margin-bottom:12px;">
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold" style="font-size:12px;">Data (MB)</label>
+                <input type="number" class="form-control form-control-sm" id="editDataLimit" value="0" placeholder="Unli=0">
+            </div>
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold" style="font-size:12px;">DL (Mbps)</label>
+                <input type="number" class="form-control form-control-sm" id="editDlLimit" value="0" placeholder="Unli=0">
+            </div>
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold" style="font-size:12px;">UL (Mbps)</label>
+                <input type="number" class="form-control form-control-sm" id="editUlLimit" value="0" placeholder="Unli=0">
+            </div>
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold" style="font-size:12px;">Pause Lmt</label>
+                <input type="number" class="form-control form-control-sm" id="editPausedLimit" value="0" placeholder="Unli=0">
+            </div>
+        </div>
+
+        <label class="form-label mt-2 fw-semibold">Status</label>
+        <select class="form-select" id="editPaused" style="margin-bottom:20px;">
+            <option value="0">Active</option>
+            <option value="1">Paused</option>
+        </select>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button class="btn btn-outline-secondary" onclick="cancelEdit()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveClient()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<div id="extendPanelOverlay" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3>Add Time</h3>
+            <button class="modal-close" onclick="cancelExtend()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>
+        <p class="text-muted" style="font-size:13px; margin-top:-10px; margin-bottom:15px;">MAC: <strong id="extendMac" class="text-dark" style="font-family:monospace;"></strong></p>
+
+        <label class="form-label mt-2 fw-semibold">Minutes to Add</label>
+        <input type="number" class="form-control" id="extendMinutes" value="30" min="1" max="1440" style="margin-bottom:20px;">
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button class="btn btn-outline-secondary" onclick="cancelExtend()">Cancel</button>
+            <button class="btn btn-primary" onclick="doExtendSession()">Add Time</button>
+        </div>
+    </div>
+</div>
+
+<!-- REMOVED TO BALANCE -->
+<!-- VOUCHERS -->
+<div id="vouchersSection" class="hidden">
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <div class="d-flex align-items-center gap-3">
+        <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="ticket" data-size="18"></i> Voucher List</h5>
+        <select class="form-select form-select-sm" id="voucherFilter" onchange="loadVouchers()" style="width:100px; margin:0;">
+            <option value="">All</option>
+            <option value="active">Active</option>
+            <option value="expired">Expired</option>
+            <option value="used">Used</option>
+        </select>
+        <button onclick="loadVouchers()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+    </div>
+    
+    <div class="card-header-actions">
+        <button class="btn btn-danger btn-sm" onclick="document.getElementById('modalDeleteVouchers').classList.add('show')"><i data-icon="trash-2" data-size="14"></i> Delete</button>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('modalGenerateVouchers').classList.add('show');updateVoucherDurationPreview()"><i data-icon="plus" data-size="14"></i> Generate</button>
+        <button onclick="openPrintVouchersModal()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"><i data-icon="printer" data-size="14"></i> Print</button>
+        <button onclick="exportVouchersCSV()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"><i data-icon="download" data-size="14"></i> Export CSV</button>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+<th>Code</th>
+<th>Duration</th>
+<th>Price</th>
+<th>Batch</th>
+<th>Created</th>
+<th>Expires</th>
+<th>Used By</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody id="voucherTable"></tbody>
+</table></div>
+</div>
+
+<!-- Modal: Generate Vouchers -->
+<div id="modalGenerateVouchers" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3>Generate Vouchers</h3>
+            <button class="modal-close" onclick="document.getElementById('modalGenerateVouchers').classList.remove('show')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div class="row g-3 mb-4 mt-1">
+            <div class="col-6"><label class="form-label fw-semibold">Number</label><input type="number" class="form-control" id="voucherCount" value="10" min="1" max="100"></div>
+            <div class="col-6"><label class="form-label fw-semibold">Price (₱)</label><input type="number" class="form-control" id="voucherPrice" value="10" min="1"></div>
+            <div class="col-12"><label class="form-label fw-semibold">Time on the voucher</label>
+                <div class="row g-2">
+                    <div class="col-4"><input type="number" class="form-control" id="voucherDays" value="0" min="0" max="365" placeholder="Days" oninput="updateVoucherDurationPreview()"><div class="form-text">Days</div></div>
+                    <div class="col-4"><input type="number" class="form-control" id="voucherHours" value="1" min="0" max="8760" placeholder="Hours" oninput="updateVoucherDurationPreview()"><div class="form-text">Hours</div></div>
+                    <div class="col-4"><input type="number" class="form-control" id="voucherMinutes" value="0" min="0" max="525600" placeholder="Minutes" oninput="updateVoucherDurationPreview()"><div class="form-text">Minutes</div></div>
+                </div>
+                <div class="form-text" id="voucherDurationPreview">Total: 1 hour (max 365 days)</div>
+            </div>
+            <div class="col-6"><label class="form-label fw-semibold">Validity (days)</label><input type="number" class="form-control" id="voucherExpiry" value="365" min="0" max="3650"><div class="form-text">How long the code stays usable. 365 = 1 year · 0 = never expires</div></div>
+            <div class="col-6"><label class="form-label fw-semibold">Batch Name</label><input type="text" class="form-control" id="voucherBatch" placeholder="e.g. MARCH-2026"></div>
+        </div>
+        <div class="d-flex justify-content-end gap-2">
+            <button onclick="document.getElementById('modalGenerateVouchers').classList.remove('show')" class="btn btn-outline-secondary">Cancel</button>
+            <button id="btnGenerateVouchers" class="btn btn-primary px-4" onclick="generateVouchers()">Generate</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Print Vouchers -->
+<div id="modalPrintVouchers" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3><i data-icon="printer" data-size="18" class="me-2"></i>Print Vouchers</h3>
+            <button class="modal-close" onclick="document.getElementById('modalPrintVouchers').classList.remove('show')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div class="mt-2 mb-3">
+            <label class="form-label fw-semibold">Batch</label>
+            <select class="form-select" id="printBatchSelect" onchange="updatePrintCount()">
+                <option value="">Loading batches...</option>
+            </select>
+            <div class="form-text">Only unused, unexpired vouchers are printed. Used codes are never reprinted.</div>
+        </div>
+        <div class="p-3 rounded border mb-3" style="border-color:var(--border-subtle) !important;">
+            <div id="printCountSummary" class="fw-semibold">Select a batch</div>
+        </div>
+        <div class="d-flex justify-content-end gap-2">
+            <button onclick="document.getElementById('modalPrintVouchers').classList.remove('show')" class="btn btn-outline-secondary">Cancel</button>
+            <button id="btnPrintVouchers" class="btn btn-primary px-4" onclick="printVouchers()"><i data-icon="printer" data-size="14" class="me-1"></i> Print</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Delete Vouchers -->
+<div id="modalDeleteVouchers" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 class="text-danger"><i data-icon="alert-triangle" data-size="18" class="me-2 text-danger"></i>Delete Vouchers</h3>
+            <button class="modal-close" onclick="document.getElementById('modalDeleteVouchers').classList.remove('show')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        
+        <div class="card bg-dark border-secondary mb-4 mt-2">
+            <div class="card-body py-3">
+                <label class="form-label fw-semibold text-light mb-2">Delete by Batch</label>
+                <div class="d-flex gap-2 align-items-center">
+                    <select class="form-select flex-grow-1" id="deleteBatchSelect" onchange="loadBatchCount()">
+                        <option value="">Select Batch</option>
+                    </select>
+                    <span id="batchCount" class="text-muted small text-end" style="min-width:75px;">0 vouchers</span>
+                    <button onclick="deleteBatch();document.getElementById('modalDeleteVouchers').classList.remove('show')" class="btn btn-outline-danger">Delete</button>
+                </div>
+            </div>
+        </div>
+        
+        <label class="form-label fw-semibold text-light mb-2">Bulk Delete Options</label>
+        <div class="d-grid gap-2">
+            <button onclick="deleteUsed();document.getElementById('modalDeleteVouchers').classList.remove('show')" class="btn btn-outline-warning">Delete Used Vouchers</button>
+            <button onclick="deleteExpired();document.getElementById('modalDeleteVouchers').classList.remove('show')" class="btn btn-outline-warning">Delete Expired Vouchers</button>
+            <button onclick="deleteAllVouchers();document.getElementById('modalDeleteVouchers').classList.remove('show')" class="btn btn-danger mt-2">Delete ALL Vouchers</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Generated Vouchers Copy -->
+<div id="modalGeneratedVouchers" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3>Generated Vouchers</h3>
+            <button class="modal-close" onclick="document.getElementById('modalGeneratedVouchers').classList.remove('show')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <textarea id="voucherOutput" class="form-control font-monospace my-3" rows="10" readonly style="background-color: var(--bs-dark); color: var(--bs-light); border-color: var(--bs-gray-700); resize: none;"></textarea>
+        <div class="d-flex justify-content-end gap-2">
+            <button onclick="document.getElementById('modalGeneratedVouchers').classList.remove('show')" class="btn btn-outline-secondary">Close</button>
+            <button class="btn btn-outline-primary" onclick="exportVouchers('text')"><i data-icon="file-text" data-size="14" class="me-1"></i> Export TXT</button>
+            <button class="btn btn-outline-success" onclick="exportVouchers('csv')"><i data-icon="file-spreadsheet" data-size="14" class="me-1"></i> Export CSV</button>
+            <button class="btn btn-primary" onclick="copyVouchers()"><i data-icon="copy" data-size="14" class="me-1"></i> Copy All</button>
+        </div>
+    </div>
+</div>
+
+</div>
+
+<!-- GCASH E-PAYMENT -->
+<div id="gcashSection" class="hidden">
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+    <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="smartphone" data-size="18"></i> GCash E-Payment</h5>
+    <div class="form-check form-switch ff-toggle mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="gcashEnabled">
+        <label class="form-check-label fw-semibold" for="gcashEnabled">Enable</label>
+    </div>
+</div>
+<div class="card-body">
+<p class="card-subtitle mb-3 text-muted">Let customers pay with GCash — no coins, no gateway, no fees. Generate a pool of voucher codes here (one batch per coin rate), export them to a file, and import that file into the companion Android app. The app runs on the operator's phone: when a GCash "received ₱X" notification matching a rate price arrives, it pops one code from that rate's pool and SMSes it to the customer, who types it into the portal's "Wifi Pass" box. The app never needs to reach the router, so it works whether or not the operator's phone is on the router's network.</p>
+
+<div class="row gx-3 gy-3 mb-3">
+    <div class="col-sm-6 col-md-4 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Operator GCash Number</label>
+        <input type="text" class="form-control" id="gcashNumber" placeholder="09XXXXXXXXX">
+        <div class="form-text">The number customers send to.</div>
+    </div>
+    <div class="col-sm-6 col-md-4 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">GCash QR Image</label>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <img id="gcashQrPreview" src="" alt="QR" style="width:56px;height:56px;object-fit:cover;border-radius:8px;display:none;border:1px solid #e2e8f0;">
+            <div class="flex-grow-1">
+                <input type="file" class="form-control form-control-sm" id="gcashQrFile" accept="image/*">
+            </div>
+        </div>
+        <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1" type="button" onclick="uploadGcashQr()"><i data-icon="upload" data-size="13"></i> Upload QR</button>
+        <input type="hidden" id="gcashQr" value="">
+        <div class="form-text">PNG/JPG up to 2MB. Shown on the portal pay screen.</div>
+    </div>
+    <div class="col-sm-6 col-md-4 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Companion App Secret</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="text" class="form-control" id="gcashSecretDisplay" placeholder="Not generated" readonly>
+            <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1" type="button" onclick="generateGcashSecret()"><i data-icon="key" data-size="14"></i> Generate</button>
+        </div>
+        <div class="form-text">Type the shown secret into the companion app's Settings (Router secret).</div>
+    </div>
+    <div class="col-sm-6 col-md-4 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Voucher Expiry (days, 0 = none)</label>
+        <input type="number" class="form-control" id="gcashVoucherExpiry" value="0" min="0" max="365">
+        <div class="form-text">Expiry on minted codes.</div>
+    </div>
+    <div class="col-sm-6 col-md-4 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Codes Per Rate (Generate Pool)</label>
+        <div class="input-group input-group-sm">
+            <input type="number" class="form-control" id="gcashCodesPerRate" value="20" min="1" max="200">
+            <button class="btn btn-outline-primary" type="button" onclick="generateGcashPool()">Generate</button>
+        </div>
+        <div class="form-text">Mints N codes for each coin rate.</div>
+    </div>
+</div>
+
+<!-- GCash Free Browsing Window (grant-first; replaces the v2.1.2 walled garden) -->
+<hr class="my-3">
+<div class="mb-2">
+    <div class="form-check form-switch mb-2 d-flex align-items-center gap-2">
+        <input class="form-check-input" type="checkbox" role="switch" id="gcashFreewindowEnabled">
+        <label class="form-check-label fw-semibold" for="gcashFreewindowEnabled">GCash app access</label>
+    </div>
+    <div class="form-text">When ON (default), customers with no active session get a short GCash app access window from the portal so they can open the GCash app and pay.</div>
+</div>
+
+<div class="d-flex gap-2 flex-wrap mb-2">
+    <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveGcashConfig()"><i data-icon="save" data-size="16"></i> Save Changes</button>
+    <button class="btn btn-success d-inline-flex align-items-center gap-2" onclick="exportGcashPool()"><i data-icon="download" data-size="16"></i> Export for Companion App</button>
+    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" onclick="loadGcashConfig()"><i data-icon="refresh-cw" data-size="13"></i> Refresh Pool</button>
+</div>
+<div id="gcashStatus" class="mb-3" style="font-size:13px;"></div>
+
+<!-- Pool inventory -->
+<hr class="my-3">
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="fw-bold mb-0 d-flex align-items-center gap-2"><i data-icon="bar-chart-2" data-size="16"></i> Pool Inventory</h6>
+    <small class="text-muted">Codes minted with batch = "gcash". Available = active codes ready to dispense.</small>
+</div>
+<div class="table-responsive">
+    <table class="table table-hover table-striped align-middle styled-table" style="font-size:13px;">
+        <thead class="table-dark">
+            <tr><th>Rate (₱)</th><th>Minutes</th><th>Total</th><th>Available</th><th>Redeemed</th><th>Status</th></tr>
+        </thead>
+        <tbody id="gcashPoolBody">
+            <tr><td colspan="6" class="text-center text-muted py-3">No pool generated yet.</td></tr>
+        </tbody>
+    </table>
+</div>
+</div>
+</div>
+
+</div>
+
+<!-- SUB VENDO -->
+<div id="espSection" class="hidden">
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0" style="color:var(--text-primary);"><i data-icon="cpu" data-size="20" class="me-2"></i>Sub Vendo (ESP) Management</h4>
+    <button onclick="loadESPDevices();loadLicensePool();" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2"><i data-icon="refresh-cw" data-size="16"></i> Refresh All</button>
+</div>
+
+<!-- Sub Vendo Metrics Row -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(16, 185, 129, 0.1);color:#10b981;">
+                    <i data-icon="check-circle" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Router License</div>
+                    <h4 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="routerLicenseStatus">Loading...</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(99, 102, 241, 0.1);color:#6366f1;">
+                    <i data-icon="cpu" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Registered ESPs</div>
+                    <h4 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="totalESPSlots">0</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(16, 185, 129, 0.1);color:#10b981;">
+                    <i data-icon="key" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Available Licenses</div>
+                    <h4 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="availableLicenseCount">0</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(239, 68, 68, 0.1);color:#ef4444;">
+                    <i data-icon="lock" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Used Licenses</div>
+                    <h4 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="usedLicenseCount">0</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden fields preserved for JS logic if needed -->
+<div class="d-none">
+    <span id="freeESPSlots">0</span>
+    <span id="totalLicenseCount">0</span>
+</div>
+
+
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                <h5 class="card-header-title mb-0"><i data-icon="key" data-size="16"></i> License Pool Manager</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <div class="d-flex gap-2">
+                            <div class="input-group flex-grow-1">
+                                <span class="input-group-text" style="background-color: var(--bs-dark); border-color: var(--bs-gray-700); color: var(--bs-gray-400);"><i data-icon="key" data-size="16"></i></span>
+                                <input type="text" class="form-control" id="newLicenseKey" placeholder="Enter license key (ESP-XXXX-XXXX-XXXX-XXXX)" style="background-color: var(--bs-dark); border-color: var(--bs-gray-700); color: white;">
+                            </div>
+                            <button onclick="addLicenseToPool()" class="btn btn-primary d-flex align-items-center gap-2 px-4 rounded text-nowrap"><i data-icon="plus" data-size="16"></i> Add License</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+                        <thead class="table-dark">
+                        <tr>
+                            <th>License Key</th>
+                            <th>Status</th>
+                            <th>Bound To (Slot/MAC)</th>
+                            <th>Last Used</th>
+                            <th>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody id="licensePoolBody">
+                        <tr><td colspan="5" class="text-center py-3 text-muted">Loading license pool...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title"><i data-icon="cpu" data-size="16"></i> Registered Sub Vendo Devices</h5></div>
+<div class="card-body">
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+    <th>Slot #</th>
+    <th>Name</th>
+    <th>MAC Address</th>
+    <th>Status</th>
+    <th>License</th>
+    <th>Last Seen</th>
+    <th>Actions</th>
+</tr>
+</thead>
+<tbody id="espTableBody">
+<tr><td colspan="7">Loading...</td></tr>
+</tbody>
+</table></div>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="help-circle" data-size="18"></i> How It Works</h5></div>
+<div class="card-body">
+<ul class="text-muted" style="line-height:1.8;">
+    <li><strong>Slot 1 (FREE):</strong> One Sub Vendo slot is free per router</li>
+    <li><strong>Additional Slots:</strong> Requires license key</li>
+    <li><strong>License binds to Router:</strong> License works only on parent license (locked to router license)</li>
+    <li><strong>If ESP Defective:</strong> Wait 24 hours offline, then click "Free License" to reuse on new ESP</li>
+    <li><strong>Same Router Only:</strong> License cannot be transferred to different router license</li>
+    <li><strong>WiFi Auto-Connect:</strong> ESP devices auto-scan for WiFi networks containing <strong>"FastFi"</strong> in the SSID. Always use <em>FastFi-Private</em> or similar name. Default password: <code>12345678</code></li>
+</ul>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0" style="background: linear-gradient(135deg, #6366f1, #7c3aed); border: none !important;">
+<div class="card-header border-bottom-0 pt-4 pb-0" style="background: transparent !important;"><h5 class="mb-0 text-white">Contact Administrator for Sub Vendo Licenses</h5></div>
+<div class="card-body">
+<p class="text-white">For additional Sub Vendo licenses, contact your FastFi administrator.</p>
+<p style="color:rgba(255,255,255,0.7); font-size:12px;">Note: Each license is permanently bound to one parent license (Router License).</p>
+</div>
+</div>
+
+</div>
+<!-- SALES -->
+<div id="salesSection" class="hidden">
+
+<!-- Four Metrics Row -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(99, 102, 241, 0.1);color:#6366f1;">
+                    <i data-icon="activity" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Daily Sales</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="salesDaily">₱0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(34, 197, 94, 0.1);color:#22c55e;">
+                    <i data-icon="calendar" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Weekly Sales</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="salesWeekly">₱0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(245, 158, 11, 0.1);color:#f59e0b;">
+                    <i data-icon="pie-chart" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Monthly Sales</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="salesMonthly">₱0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(14, 165, 233, 0.1);color:#0ea5e9;">
+                    <i data-icon="hard-drive" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Total Sales</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="salesTotal">₱0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 align-items-stretch">
+
+<!-- LEFT COLUMN: Sales Chart -->
+<div class="col-md-7">
+<div class="card shadow-sm border-0 h-100" style="background:var(--bg-surface);">
+    <div class="card-header card-header-custom border-0 pb-0">
+        <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="bar-chart-2" data-size="18"></i> Sales Trend</h5>
+        <div class="card-header-actions">
+            <select class="form-select form-select-sm" id="chartFilter" onchange="loadSalesChart()" style="width:130px; border-radius:6px;">
+                <option value="day">This Day</option>
+                <option value="week" selected>This Week</option>
+                <option value="month">This Month</option>
+            </select>
+            <button onclick="loadAllSales()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" title="Refresh"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+            <button onclick="exportSales()" class="btn btn-primary btn-sm d-flex align-items-center gap-1"><i data-icon="download" data-size="14"></i> CSV</button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div style="height:320px; width:100%;">
+            <canvas id="salesChartWeekly"></canvas>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- RIGHT COLUMN: Delete Sales -->
+<div class="col-md-5">
+<div class="card shadow-sm border-0 h-100" style="background:var(--bg-surface);">
+    <div class="card-header card-header-custom border-0 pb-0">
+        <h5 class="card-header-title text-danger"><i data-icon="trash-2" data-size="18"></i> Manage Data</h5>
+    </div>
+    <div class="card-body d-flex flex-column gap-3">
+        
+        <!-- Delete By Date Range -->
+        <div class="p-3 rounded border" style="border-color:var(--border-subtle) !important;">
+            <label class="form-label text-muted fw-semibold mb-2" style="font-size:11px;text-transform:uppercase;">By Date Range</label>
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <input type="date" id="deleteDateStart" class="form-control form-control-sm">
+                <span class="text-muted" style="font-size:12px;">to</span>
+                <input type="date" id="deleteDateEnd" class="form-control form-control-sm">
+            </div>
+            <button class="btn btn-outline-danger btn-sm w-100 d-flex justify-content-center align-items-center gap-2" onclick="deleteRangeSales()"><i data-icon="trash-2" data-size="14"></i> Delete Range</button>
+        </div>
+
+        <!-- Delete Single Day -->
+        <div class="p-3 rounded border" style="border-color:var(--border-subtle) !important;">
+            <label class="form-label text-muted fw-semibold mb-2" style="font-size:11px;text-transform:uppercase;">Single Day</label>
+            <div class="d-flex gap-2">
+                <input type="date" id="deleteDate" class="form-control form-control-sm" style="flex:1;">
+                <button class="btn btn-outline-warning btn-sm flex-shrink-0 d-inline-flex align-items-center gap-1" onclick="deleteDaySales()"><i data-icon="trash-2" data-size="14"></i> Delete</button>
+            </div>
+        </div>
+
+        <hr class="my-1" style="border-color:var(--border-subtle);">
+
+        <!-- Bulk clear -->
+        <div>
+            <label class="form-label text-muted fw-semibold mb-2" style="font-size:11px;text-transform:uppercase;">Mass Deletion</label>
+            <div class="d-flex flex-column gap-2">
+                <button class="btn btn-warning btn-sm w-100 d-flex justify-content-center align-items-center gap-2" onclick="clearMonthlySales()"><i data-icon="calendar" data-size="14"></i> Clear This Month</button>
+                <button class="btn btn-danger btn-sm w-100 d-flex justify-content-center align-items-center gap-2" onclick="clearAllSales()"><i data-icon="alert-triangle" data-size="14"></i> Clear All History</button>
+            </div>
+        </div>
+
+        <p id="salesDeleteResult" class="text-success mt-auto mb-0" style="font-size:13px; text-align:center;"></p>
+    </div>
+</div>
+</div>
+</div>
+
+<!-- BOTTOM ROW: Sales History Table -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0" style="background:var(--bg-surface);">
+            <div class="card-header card-header-custom border-0 pb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="list" data-size="18"></i> Detailed Sales History</h5>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <input type="date" id="salesRangeStart" class="form-control form-control-sm" style="width:150px;">
+                    <span class="text-muted" style="font-size:12px;">to</span>
+                    <input type="date" id="salesRangeEnd" class="form-control form-control-sm" style="width:150px;">
+                    <button onclick="loadSalesHistory()" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="calendar" data-size="14"></i> Apply</button>
+                    <button onclick="clearSalesRange()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="x" data-size="14"></i> Clear</button>
+                    <span class="badge bg-success" style="font-size:12px;padding:7px 10px;">Range Total: <span id="salesRangeTotal">₱0</span></span>
+                    <button onclick="loadSalesHistory()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" title="Refresh Table"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover align-middle mb-0" style="font-size:14px; border-color:var(--border-subtle);">
+                        <thead style="background:var(--bg-card); color:var(--text-muted); font-size:12px; text-transform:uppercase; letter-spacing:0.5px; position: sticky; top: 0; z-index: 1;">
+                            <tr>
+                                <th class="ps-4 border-0">Date & Time</th>
+                                <th class="border-0">Device Name</th>
+                                <th class="border-0">MAC Address</th>
+                                <th class="border-0">Speed Limit</th>
+                                <th class="border-0">Pause Limit</th>
+                                <th class="border-0">Expires At</th>
+                                <th class="border-0 text-center">Coins Inserted</th>
+                                <th class="border-0 text-end pe-4">Amount (₱)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesHistoryTbody" style="border-top:1px solid var(--border-subtle);">
+                            <tr><td colspan="8" class="text-center py-4 text-muted">Loading history...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+<!-- REMOTE ACCESS -->
+<div id="remoteAccessSection" class="hidden">
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="cloud" data-size="18"></i> Remote Access (VPN)</h5></div>
+<div class="card-body">
+<div id="remoteStatus" class="ff-status-row">
+    <div class="ff-status-item"><span class="ff-status-label">Device</span><span id="deviceStatusBadge" class="badge bg-success">Online</span></div>
+    <div class="ff-status-item"><span class="ff-status-label">Tunnel</span><span id="vpnStatus" class="badge bg-danger">Not Connected</span></div>
+    <div class="ff-status-item"><span class="ff-status-label">Enrolled</span><strong id="enrolledStatus" class="text-muted">No</strong></div>
+    <div class="ff-status-item"><span class="ff-status-label">IP Address</span><strong id="vpnIP" style="color:var(--text-primary);">-</strong></div>
+    <div class="ff-status-item wide"><span class="ff-status-label">Remote URL</span><a id="remoteURL" href="#" target="_blank" style="color:var(--accent);font-weight:600;word-break:break-all;">-</a></div>
+</div>
+<div class="d-flex gap-2 mt-3">
+    <button id="toggleVpnBtn" onclick="toggleVPN(this)" class="btn btn-primary d-inline-flex align-items-center gap-2"><i data-icon="power" data-size="16"></i> Connect VPN</button>
+    <button onclick="loadRemoteAccessStatus()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+</div>
+</div>
+</div>
+
+<div id="enrollDeviceCard" class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="key" data-size="18"></i> Enroll Device</h5></div>
+<div class="card-body">
+<p class="ff-desc">Generate a token from the FastFi dashboard at fastfi.cloud, then paste it here to enroll this device for remote access.</p>
+<input type="text" class="form-control" id="remoteToken" placeholder="RMT-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX">
+<button onclick="enrollRemoteAccess(this)" class="btn btn-primary d-inline-flex align-items-center gap-2 mt-2"><i data-icon="check-circle" data-size="16"></i> Enroll</button>
+</div>
+</div>
+
+</div>
+<!-- NETWORK -->
+<div id="networkSection" class="hidden">
+<ul class="nav nav-pills mb-3" style="font-size:13px; gap:6px;">
+  <li class="nav-item"><button class="nav-link active" id="netTabWan" type="button" onclick="showNetPanel('wan')">WAN</button></li>
+  <li class="nav-item"><button class="nav-link" id="netTabDhcp" type="button" onclick="showNetPanel('dhcp')">DHCP Leases</button></li>
+  <li class="nav-item"><button class="nav-link" id="netTabShield" type="button" onclick="showNetPanel('shield')">Security / Shield</button></li>
+</ul>
+<div id="netWanPanel">
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="activity" data-size="18"></i> WAN Settings</h5></div>
+<div class="card-body">
+
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Connection Type</label>
+            <select class="form-select" id="proto">
+                <option value="dhcp">DHCP</option>
+                <option value="static">Static IP</option>
+                <option value="pppoe">PPPoE</option>
+            </select>
+            <p id="wanStatus" class="mt-1 mb-0 text-info fw-semibold" style="font-size:13px;"></p>
+        </div>
+    </div>
+
+    <div id="staticBox" style="display:none;" class="row mb-3 gx-3 gy-2">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">IP Address</label>
+            <input class="form-control" id="staticIp" placeholder="e.g. 192.168.1.100">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Netmask</label>
+            <input class="form-control" id="staticNetmask" value="255.255.255.0">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Gateway</label>
+            <input class="form-control" id="staticGateway" placeholder="e.g. 192.168.1.1">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">DNS</label>
+            <input class="form-control" id="staticDns" value="8.8.8.8">
+        </div>
+    </div>
+
+    <div id="pppoeBox" style="display:none;" class="row mb-3 gx-3 gy-2">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">PPPoE Username</label>
+            <input class="form-control" id="pppoeUser" placeholder="ISP username" autocomplete="off">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">PPPoE Password</label>
+            <input class="form-control" type="password" id="pppoePass" placeholder="Leave blank to keep current" autocomplete="new-password">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">MTU</label>
+            <input class="form-control" id="pppoeMtu" value="1492" placeholder="1492">
+        </div>
+        <div class="col-12">
+            <p id="pppoeHint" class="mt-1 mb-0 text-muted" style="font-size:12px;">PPPoE needs the ppp/pppoe packages, which the router installs on-demand from the internet when you first enable it. If the router is offline, enabling PPPoE fails safely without breaking the current connection.</p>
+        </div>
+    </div>
+
+    <button class="btn btn-primary d-inline-flex align-items-center gap-2 mt-2" onclick="applyWanSettings()"><i data-icon="save" data-size="16"></i> Apply WAN Settings</button>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="shield" data-size="18"></i> WAN Bufferbloat Control (SQM)</h5></div>
+<div class="card-body">
+    <p class="card-subtitle mb-3 text-muted">Shapes the entire WAN link using CAKE to reduce ping spikes and bufferbloat. Works alongside per-client speed limits.</p>
+    <div class="row mb-3 gx-3 gy-2">
+        <div class="col-md-4">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">SQM Status</label>
+            <select class="form-select" id="sqmEnabled">
+                <option value="0">Disabled</option>
+                <option value="1">Enabled</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Download (Kbps)</label>
+            <input type="number" class="form-control" id="sqmDownload" placeholder="e.g. 90000" min="100">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Upload (Kbps)</label>
+            <input type="number" class="form-control" id="sqmUpload" placeholder="e.g. 40000" min="100">
+        </div>
+    </div>
+    <div class="d-flex align-items-center gap-3">
+        <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveSqmSettings()"><i data-icon="save" data-size="16"></i> Save SQM</button>
+        <span id="sqmIfaceLabel" class="text-muted" style="font-size:11px;"></span>
+    </div>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="zap" data-size="18"></i> Speed Limit Settings</h5></div>
+<div class="card-body">
+    <p class="card-subtitle mb-4 text-muted">Configure the default speed limit applied uniformly to all connected clients.</p>
+    <div class="row mb-3 gx-3 gy-2">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Download Limit (Mbps)</label>
+            <input type="number" class="form-control" id="speedLimitDown" placeholder="e.g. 5">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Upload Limit (Mbps)</label>
+            <input type="number" class="form-control" id="speedLimitUp" placeholder="e.g. 5">
+        </div>
+    </div>
+    <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveSpeedLimit()"><i data-icon="save" data-size="16"></i> Save Speed Limit</button>
+</div>
+</div>
+</div><!-- /netWanPanel -->
+
+</div>
+<!-- WIFI -->
+<div id="wifiSection" class="hidden">
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="wifi" data-size="18"></i> SSID Settings</h5></div>
+<div class="card-body">
+    <div class="row mb-3 gx-3 gy-2">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">2.4GHz SSID</label>
+            <input type="text" class="form-control" id="ssid24">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">5GHz SSID</label>
+            <input type="text" class="form-control" id="ssid5">
+        </div>
+    </div>
+    <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveSSID()"><i data-icon="save" data-size="16"></i> Save SSID</button>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="cpu" data-size="18"></i> Sub Vendo Private WiFi</h5></div>
+<div class="card-body">
+    <p class="card-subtitle mb-3 text-muted">Separate WiFi for Sub Vendo devices to connect privately. Configure device firmware with the same SSID/password.</p>
+    <div class="alert py-2 px-3 mb-3 border-0 d-flex align-items-start gap-2" style="background:rgba(245,158,11,0.15); color:#f59e0b; font-size:13px; border-radius:8px;">
+        <i data-icon="alert-triangle" data-size="16" class="flex-shrink-0 mt-1"></i>
+        <span><strong>Important:</strong> The SSID must contain <code style="color:#f59e0b;background:rgba(0,0,0,0.2);padding:1px 5px;border-radius:3px;">FastFi</code> in the name (e.g. <em>FastFi-Private</em>, <em>FastFi-ESP</em>) for ESP devices to auto-discover and connect to this network.</span>
+    </div>
+    <div class="row mb-3 gx-3 gy-2">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">ESP WiFi SSID</label>
+            <input type="text" class="form-control" id="espSSID" placeholder="e.g., FastFi-ESP">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">ESP WiFi Password</label>
+            <input type="password" class="form-control" id="espPassword" placeholder="WiFi Password">
+        </div>
+    </div>
+    <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveESPSSID()"><i data-icon="save" data-size="16"></i> Save ESP WiFi</button>
+    <p id="espWiFiResult" class="text-success mt-2 mb-0 fw-semibold" style="font-size:13px;"></p>
+</div>
+</div>
+
+</div>
+<!-- SETTINGS -->
+<div id="settingsSection" class="hidden">
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="key" data-size="18"></i> FastFi License</h5></div>
+<div class="card-body">
+    
+    <div class="d-flex flex-column gap-1 mb-3 p-2 border border-secondary border-opacity-25 rounded" style="background-color: var(--bg-sidebar-hover);">
+        <div class="d-flex justify-content-between align-items-center py-1">
+            <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Device ID</span>
+            <span id="deviceId" class="font-monospace text-primary fw-bold" style="font-size:13px;">-</span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center border-top border-secondary border-opacity-25 py-1">
+            <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Status</span>
+            <span id="licenseStatus" class="status-pill inactive">-</span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center border-top border-secondary border-opacity-25 py-1">
+            <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Expires</span>
+            <span id="licenseExpiry" class="text-primary fw-bold" style="font-size:13px;">-</span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center border-top border-secondary border-opacity-25 py-1">
+            <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Plan</span>
+            <span id="licensePlan" class="status-pill inactive">-</span>
+        </div>
+        <div id="licenseKeyRow" class="d-flex justify-content-between align-items-center border-top border-secondary border-opacity-25 py-1" style="display:none;">
+            <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">License Key</span>
+            <strong id="activeLicenseKey" class="font-monospace text-primary" style="font-size:13px; word-break:break-all;">-</strong>
+        </div>
+    </div>
+    
+    <div id="licenseActivation" class="row gx-2 gy-2 align-items-end">
+        <div class="col-sm-8 col-md-6 col-lg-5">
+            <label class="text-muted fw-semibold" style="font-size:12px; margin-bottom:4px; display:block;">Activate New License</label>
+            <input type="text" class="form-control" id="licenseKey" placeholder="Enter License Code (e.g. PRO-1234)">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="activateLicense()"><i data-icon="check-circle" data-size="16"></i> Activate License</button>
+        </div>
+    </div>
+
+    <div id="licenseRevocation" class="mt-3" style="display:none;">
+        <button id="revokeLicenseBtn" class="btn btn-outline-danger d-inline-flex align-items-center gap-2" onclick="removeRouterLicense()"><i data-icon="x-circle" data-size="16"></i> Remove License</button>
+    </div>
+
+    <div class="mt-3 border-top border-secondary border-opacity-25 pt-3">
+        <div class="row g-2 align-items-center mb-2">
+            <div class="col-auto flex-grow-1" style="max-width:320px;">
+                <input type="text" class="form-control form-control-sm" id="recoverLicenseKey" placeholder="License key (optional — for rebind to a new device ID)">
+            </div>
+            <div class="col-auto">
+                <button id="recoverLicenseBtn" class="btn btn-outline-info d-inline-flex align-items-center gap-2" onclick="recoverLicense()"><i data-icon="refresh-cw" data-size="16"></i> Recover License (after reflash)</button>
+            </div>
+        </div>
+        <small class="d-block text-muted mt-1" style="font-size:11px;">Reflashed the SD card or replaced the image?
+        Leave the key blank to re-bind this device's existing license from the FastFi Cloud (matched by Device ID, no
+        key needed). Paste your license key instead to re-bind it to this device's current ID — use this if the
+        Device ID changed (e.g. board replacement) or the key was bound under an older ID. The device must be
+        online and the key must have been previously activated.</small>
+        <p id="licenseRecoverResult" class="mt-2 fw-semibold" style="font-size:13px;"></p>
+    </div>
+
+    <p id="licenseResult" class="mt-2 text-primary fw-semibold" style="font-size:13px;"></p>
+</div>
+</div>
+
+<!-- SECURITY SETTINGS -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="shield" data-size="18"></i> Security Settings</h5></div>
+<div class="card-body">
+    
+    <div class="mb-4">
+        <label class="form-label fw-bold text-muted" style="font-size:12px;">Change Admin Password</label>
+        <div class="row gx-2 gy-2 align-items-center">
+            <div class="col-sm-8 col-md-6 col-lg-4">
+                <input type="password" class="form-control" id="newPass" placeholder="Enter new password">
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="changePassword()"><i data-icon="save" data-size="16"></i> Change Password</button>
+            </div>
+        </div>
+    </div>
+    
+    <hr class="border-secondary opacity-25">
+    
+
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="shield-off" data-size="18"></i> Anti-Tethering</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="antiTetheringToggle" onchange="toggleTethering()">
+            <label class="form-check-label" for="antiTetheringToggle">Block Hotspot Sharing</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Prevents users from bypassing billing by sharing their WiFi connection to other devices via mobile hotspot or USB tethering.</p>
+</div>
+</div>
+
+<!-- EXPIRATION ENGINE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="clock" data-size="18"></i> Session Expire duration</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="validityToggle" onchange="toggleValidity()">
+            <label class="form-check-label" for="validityToggle">Enable Session Expiration (Validity)</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Enforces an absolute expiration time on sessions based on the coin rate validity setting, terminating the session even if paused.</p>
+</div>
+</div>
+
+<!-- DATA ALLOCATION ENGINE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="database" data-size="18"></i> Data Allocation</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="dataAllocationToggle" onchange="toggleDataAllocation()">
+            <label class="form-check-label" for="dataAllocationToggle">Enable Data Limits (MB/GB)</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Automatically drops the client's connection and marks their session as expired once their data allocation is fully consumed.</p>
+</div>
+</div>
+
+<!-- PORTAL CONNECTIVITY ENGINE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="wifi-off" data-size="18"></i> Portal Connectivity</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="hideInsertToggle" onchange="toggleHideInsert()">
+            <label class="form-check-label" for="hideInsertToggle">Hide 'Insert Coin' on No Internet</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Automatically hides the insert coin button on the captive portal when the router loses its upstream internet connection, preventing users from paying for dead air.</p>
+</div>
+</div>
+
+<!-- BUY DATA FEATURE TOGGLE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="database" data-size="18"></i> Buy Data Button</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="buyDataToggle" onchange="toggleBuyData()">
+            <label class="form-check-label" for="buyDataToggle">Enable 'Buy Data' Button</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Controls the visibility of the "Buy Data" button on the client portal. Disable this to restrict customers to time-based plans only.</p>
+</div>
+</div>
+
+<!-- WIFI PASS FEATURE TOGGLE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="ticket" data-size="18"></i> Wifi Pass Button</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="wipassToggle" onchange="toggleWipass()">
+            <label class="form-check-label" for="wipassToggle">Enable 'Wifi Pass' Button</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Controls the visibility of the "Wifi Pass" (Voucher) button on the client portal. Disable this if you do not want to support voucher-based billing.</p>
+</div>
+</div>
+
+<!-- COINSLOT SETTINGS ENGINE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="coins" data-size="18"></i> Coinslot Settings</h5></div>
+<div class="card-body">
+    <div class="row gx-2 gy-2 align-items-end mb-3">
+        <div class="col-sm-6 col-md-4 col-lg-3">
+            <label class="form-label" for="insertTimerInput">Insert Coin Timer (seconds)</label>
+            <input type="number" class="form-control" id="insertTimerInput" min="10" max="300" value="60">
+        </div>
+        <div class="col-sm-6 col-md-4 col-lg-3">
+            <label class="form-label" for="insertSpamLimitInput">Max Empty Tries Before Ban</label>
+            <input type="number" class="form-control" id="insertSpamLimitInput" min="1" max="50" value="5">
+        </div>
+        <div class="col-sm-12 col-md-8 col-lg-6">
+            <label class="form-label" for="bannerTextInput">Running Banner Text</label>
+            <input type="text" class="form-control" id="bannerTextInput" placeholder="Insert coin or enter voucher to start">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary d-inline-flex align-items-center gap-2" id="saveCoinslotSettingsBtn" onclick="saveCoinslotSettings()"><i data-icon="save" data-size="16"></i> Save</button>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">
+        <strong>Timer:</strong> How long clients have to insert coins before the session auto-cancels (10–300s).<br>
+        <strong>Ban:</strong> After this many "Insert Coin" attempts without inserting any coins, the client is blocked from locking coinslots for 5 minutes.<br>
+        <strong>Running Banner Text:</strong> The scrolling text displayed on the captive portal page.
+    </p>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="pause-circle" data-size="18"></i> Pause Limit Settings</h5></div>
+<div class="card-body">
+<div class="d-flex align-items-center gap-3 mb-2">
+    <div class="form-check form-switch ff-toggle mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="pauseLimitEnabled" checked>
+        <label class="form-check-label" for="pauseLimitEnabled">Enable Global Pause Limit</label>
+    </div>
+</div>
+<p class="ff-desc mb-3">Limit how many times a client can pause their session globally.</p>
+<div class="row gx-2 gy-2 align-items-end">
+    <div class="col-sm-8 col-md-6 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Pause Limit (times)</label>
+        <input type="number" class="form-control" id="pauseLimitInput" value="10" min="0" max="100">
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="savePauseLimit()"><i data-icon="save" data-size="16"></i> Save Limit</button>
+    </div>
+</div>
+</div>
+</div>
+
+<!-- AUTO-PAUSE SETTINGS -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="timer" data-size="18"></i> Auto-Pause Settings</h5></div>
+<div class="card-body">
+<p class="card-subtitle mb-3 text-muted">Automatically pause sessions when clients disconnect from WiFi</p>
+<div class="d-flex flex-wrap gap-4 mb-3">
+    <div class="form-check form-switch ff-toggle">
+        <input class="form-check-input" type="checkbox" role="switch" id="autopauseEnabled">
+        <label class="form-check-label" for="autopauseEnabled">Enable Auto-Pause</label>
+    </div>
+    <div class="form-check form-switch ff-toggle">
+        <input class="form-check-input" type="checkbox" role="switch" id="autopauseAutoResume" checked>
+        <label class="form-check-label" for="autopauseAutoResume">Auto-Resume on Reconnect</label>
+    </div>
+</div>
+<div class="row gx-2 gy-2 align-items-end">
+    <div class="col-sm-8 col-md-6 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Grace Period (sec)</label>
+        <input type="number" class="form-control" id="autopauseGracePeriod" value="60" min="10" max="600">
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveAutopauseConfig()"><i data-icon="save" data-size="16"></i> Save Config</button>
+    </div>
+</div>
+</div>
+</div>
+
+
+
+
+
+
+<!-- BANNER UPLOAD -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="image" data-size="18"></i> Upload Banner</h5></div>
+<div class="card-body">
+<p class="card-subtitle mb-3 text-muted">Recommended: 800x200px, JPEG/PNG (max 5MB)</p>
+<div class="row gx-2 gy-2 align-items-center">
+    <div class="col-sm-8 col-md-6 col-lg-5">
+        <input class="form-control" type="file" id="bannerFile" accept="image/jpeg,image/png">
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="uploadBanner()"><i data-icon="upload-cloud" data-size="16"></i> Upload File</button>
+    </div>
+</div>
+<p id="bannerResult" class="mt-2 mb-0 fw-semibold" style="font-size:12px;"></p>
+</div>
+</div>
+<!-- AUDIO UPLOAD -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="music" data-size="18"></i> Audio Customization</h5></div>
+<div class="card-body">
+
+    <!-- 1. Background Music -->
+    <h6 class="fw-bold mb-1">1. Insert Coin Background Music</h6>
+    <p class="text-muted mb-2" style="font-size: 13px;">Plays continuously while waiting for coins (MP3 only, max 2MB).</p>
+    <div class="row gx-2 gy-2 align-items-center mb-2">
+        <div class="col-sm-8 col-md-6 col-lg-5">
+            <input class="form-control form-control-sm" type="file" id="audioFile_bg" accept=".mp3,audio/mpeg">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" id="btnUpload_bg" onclick="uploadAudio('bg')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
+        </div>
+    </div>
+    <div class="border border-secondary border-opacity-25 rounded p-2 mb-2 d-flex flex-column gap-1" style="background-color: var(--bg-sidebar-hover); max-width: 400px;">
+        <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Current Preview</span>
+        <audio id="audioPreview_bg" controls src="/audio/insert.mp3" style="width: 100%; height: 30px;"></audio>
+    </div>
+    <p id="audioResult_bg" class="mb-4 fw-semibold" style="font-size:12px;"></p>
+
+    <hr class="border-secondary border-opacity-25 my-3">
+
+    <!-- 2. Coin Inserted Sound -->
+    <h6 class="fw-bold mb-1">2. Coin Inserted Sound</h6>
+    <p class="text-muted mb-2" style="font-size: 13px;">Plays immediately when a coin drops (MP3 only, max 2MB).</p>
+    <div class="row gx-2 gy-2 align-items-center mb-2">
+        <div class="col-sm-8 col-md-6 col-lg-5">
+            <input class="form-control form-control-sm" type="file" id="audioFile_coin" accept=".mp3,audio/mpeg">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" id="btnUpload_coin" onclick="uploadAudio('coin')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
+        </div>
+    </div>
+    <div class="border border-secondary border-opacity-25 rounded p-2 mb-2 d-flex flex-column gap-1" style="background-color: var(--bg-sidebar-hover); max-width: 400px;">
+        <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Current Preview</span>
+        <audio id="audioPreview_coin" controls src="/audio/coin.mp3" style="width: 100%; height: 30px;"></audio>
+    </div>
+    <p id="audioResult_coin" class="mb-4 fw-semibold" style="font-size:12px;"></p>
+
+    <hr class="border-secondary border-opacity-25 my-3">
+
+    <!-- 3. Done/Success Sound -->
+    <h6 class="fw-bold mb-1">3. Done / Success Sound</h6>
+    <p class="text-muted mb-2" style="font-size: 13px;">Plays when the transaction completes successfully (MP3 only, max 2MB).</p>
+    <div class="row gx-2 gy-2 align-items-center mb-2">
+        <div class="col-sm-8 col-md-6 col-lg-5">
+            <input class="form-control form-control-sm" type="file" id="audioFile_success" accept=".mp3,audio/mpeg">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" id="btnUpload_success" onclick="uploadAudio('success')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
+        </div>
+    </div>
+    <div class="border border-secondary border-opacity-25 rounded p-2 mb-2 d-flex flex-column gap-1" style="background-color: var(--bg-sidebar-hover); max-width: 400px;">
+        <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Current Preview</span>
+        <audio id="audioPreview_success" controls src="/audio/success.mp3" style="width: 100%; height: 30px;"></audio>
+    </div>
+    <p id="audioResult_success" class="mb-0 fw-semibold" style="font-size:12px;"></p>
+
+</div>
+</div>
+
+</div> <!-- settingsSection -->
+
+
+
+
+<div id="updateSection" class="hidden">
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="refresh-cw" data-size="18"></i> System OTA Update</h5></div>
+        <div class="card-body text-center py-5">
+            <div class="mb-4">
+                <i data-icon="download-cloud" data-size="64" class="text-primary mb-3"></i>
+                <h4>Firmware Update Manager</h4>
+                <p class="text-muted">Current Version: <strong id="currentVersionLabel">--</strong></p>
+            </div>
+
+            <div style="max-width: 500px; margin: 0 auto;">
+                <div class="d-flex gap-2 justify-content-center mb-3">
+                    <button id="btnOTA_Check" class="btn btn-primary d-flex align-items-center gap-2"><i data-icon="search" data-size="18"></i> Check for Updates</button>
+                    <button id="btnOTA_Proceed" class="btn btn-success d-flex align-items-center gap-2" disabled><i data-icon="zap" data-size="18"></i> Apply Update Now</button>
+                </div>
+
+                <!-- Progress Section -->
+                <div id="otaProgressContainer" class="mt-4" style="display:none;">
+                    <div class="progress mb-2" style="height: 10px; border-radius: 5px; background-color: rgba(0,0,0,0.05);">
+                        <div id="otaProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                    <p id="otaProgressLabel" class="text-muted small mb-0">Starting download...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!-- Backup & Rollback (Item 4) -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="database" data-size="18"></i> Backup &amp; Rollback</h5></div>
+        <div class="card-body">
+            <div class="ff-status-row mb-3">
+                <div class="ff-status-item"><span class="ff-status-label">Rollback</span><span id="rollbackArmedBadge" class="badge bg-secondary">Idle</span></div>
+                <div class="ff-status-item wide"><span class="ff-status-label">Pending OTA</span><strong id="rollbackPendingInfo" class="text-muted">—</strong></div>
+            </div>
+            <p class="text-muted small mb-3">Before every OTA apply, FastFi snapshots your config, data, and (for overlay updates) code to <code>/www/data/backups/</code>. If an update leaves the box unhealthy on reboot, the rollback watchdog restores the previous state automatically. You can also back up or restore manually here.</p>
+
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="backupNow(this)"><i data-icon="save" data-size="16"></i> Backup Now</button>
+                <button class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" onclick="loadBackupList()"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+                <div class="form-check ms-2 mb-0">
+                    <input class="form-check-input" type="checkbox" id="backupFullMode">
+                    <label class="form-check-label small" for="backupFullMode" title="Also snapshot code (/www, lua, libexec) so a restore can roll back an overlay update. Needs more free space.">Include code (full)</label>
+                </div>
+            </div>
+
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-8 col-md-9"><label class="form-label small mb-1">Restore a snapshot</label><select id="restoreSelect" class="form-select form-select-sm" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"><option value="">— select a backup —</option></select></div>
+                <div class="col-4 col-md-3"><button class="btn btn-warning btn-sm w-100 d-inline-flex align-items-center justify-content-center gap-1" onclick="restoreBackup()"><i data-icon="rotate-ccw" data-size="14"></i> Restore</button></div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead><tr><th>Snapshot</th><th style="width:90px;">Size</th><th style="width:70px;">&nbsp;</th></tr></thead>
+                    <tbody id="backupListTbody"><tr><td colspan="3" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+            <p class="text-muted mt-2 mb-0" style="font-size:11px;"><strong>Note:</strong> This restores configuration, data, and (for overlay updates) code — not the kernel. A firmware (<code>.bin</code>) update that breaks the kernel cannot be rolled back in-device (no A/B partition); recovery then requires an external SD-card reflash tool. Restoring overwrites current config — reboot the router afterward.</p>
+        </div>
+    </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DHCP LEASES -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="dhcpSection" class="hidden">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb" style="font-size:12px; margin:0;">
+            <li class="breadcrumb-item">Network</li>
+            <li class="breadcrumb-item active" aria-current="page">DHCP Leases</li>
+        </ol>
+    </nav>
+
+    <!-- Live Leases -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+            <h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="list" data-size="18"></i> Live DHCP Leases</h5>
+            <button class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" onclick="loadDhcpLeases()">
+                <i data-icon="refresh-cw" data-size="12"></i> Refresh
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead><tr><th>MAC</th><th>IP</th><th>Hostname</th><th>Expires</th><th>Session</th></tr></thead>
+                    <tbody id="dhcpLeasesTbody"><tr><td colspan="5" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Static Leases -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="lock" data-size="18"></i> Static Leases (Reserved IP per MAC)</h5></div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-2">
+                    <thead><tr><th>MAC</th><th>IP</th><th>Hostname</th><th style="width:90px;">&nbsp;</th></tr></thead>
+                    <tbody id="dhcpStaticTbody"><tr><td colspan="4" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+            <div class="row g-2 align-items-end">
+                <div class="col-6 col-md-4"><label class="form-label small mb-1">MAC</label><input type="text" id="dhcpStaticMac" class="form-control form-control-sm" placeholder="aa:bb:cc:dd:ee:ff" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"></div>
+                <div class="col-6 col-md-3"><label class="form-label small mb-1">IP</label><input type="text" id="dhcpStaticIp" class="form-control form-control-sm" placeholder="10.0.0.50" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"></div>
+                <div class="col-6 col-md-3"><label class="form-label small mb-1">Hostname</label><input type="text" id="dhcpStaticName" class="form-control form-control-sm" placeholder="optional" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"></div>
+                <div class="col-6 col-md-2"><button class="btn btn-primary btn-sm w-100 d-inline-flex align-items-center justify-content-center gap-1" onclick="addDhcpStatic()"><i data-icon="plus" data-size="14"></i> Add</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DHCP Pools -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="server" data-size="18"></i> DHCP Pools</h5></div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead><tr><th>Interface</th><th>Section</th><th>Start</th><th>Limit</th><th>Lease Time</th><th style="width:90px;">&nbsp;</th></tr></thead>
+                    <tbody id="dhcpPoolsTbody"><tr><td colspan="6" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+            <p class="text-muted mt-2 mb-0" style="font-size:12px;">Edit a pool then click Save. Sub-vendo pools (<code>sv*</code>) are managed automatically and may be overwritten.</p>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- FASTFI SHIELD -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="shieldSection" class="hidden">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb" style="font-size:12px; margin:0;">
+            <li class="breadcrumb-item">Network</li>
+            <li class="breadcrumb-item active" aria-current="page">Security / Shield</li>
+        </ol>
+    </nav>
+
+    <!-- Starlink Shield -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+            <h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="shield" data-size="18"></i> FastFi Starlink Shield</h5>
+            <span id="shieldProtectionBadge" class="badge bg-secondary">Inactive</span>
+        </div>
+        <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="shieldToggleStarlink" onchange="toggleShieldStarlink()">
+                        <label class="form-check-label" for="shieldToggleStarlink">Block Starlink management domains</label>
+                    </div>
+                    <small class="text-muted">Null-routes the Starlink dish/app/portal hostnames so customers can't reach the Starlink management plane through the vendo.</small>
+                </div>
+            </div>
+            <div class="d-flex gap-2 mb-2">
+                <button class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" onclick="syncStarlinkNow()"><i data-icon="refresh-cw" data-size="14"></i> Sync Starlink IPs Now</button>
+                <button class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" onclick="applyShield()"><i data-icon="zap" data-size="14"></i> Apply Now</button>
+            </div>
+            <div id="shieldStatusLine" class="fw-semibold" style="font-size:13px;"></div>
+        </div>
+    </div>
+
+    <!-- Anti-bypass -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="lock" data-size="18"></i> Anti-Bypass</h5></div>
+        <div class="card-body">
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="shieldToggleForceDns" onchange="toggleForceDns()">
+                <label class="form-check-label" for="shieldToggleForceDns">Force client DNS to router</label>
+            </div>
+            <small class="text-muted d-block mb-3">Redirects any DNS query (udp/tcp 53) from LAN clients to the local resolver so they can't bypass the blocklist with an external DNS server.</small>
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="shieldToggleDoh" onchange="toggleDoh()">
+                <label class="form-check-label" for="shieldToggleDoh">Block DoH (DNS-over-HTTPS)</label>
+            </div>
+            <small class="text-muted d-block mb-3">Null-routes common DoH providers (dns.google, cloudflare-dns.com) so browsers can't switch to an HTTPS resolver.</small>
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="shieldToggleQuic" onchange="toggleQuic()">
+                <label class="form-check-label" for="shieldToggleQuic">Block QUIC (udp/443)</label>
+            </div>
+            <small class="text-muted d-block"><span class="text-warning">Experimental — may break HTTP/3.</span> Drops outbound udp/443 so clients fall back to TCP.</small>
+        </div>
+    </div>
+
+    <!-- Blocked Sites -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="ban" data-size="18"></i> Blocked Sites</h5></div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-2">
+                    <thead><tr><th>Domain</th><th>Source</th><th style="width:90px;">&nbsp;</th></tr></thead>
+                    <tbody id="shieldBlockedTbody"><tr><td colspan="3" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+            <div class="row g-2 align-items-end">
+                <div class="col-8 col-md-9"><input type="text" id="shieldBlockedInput" class="form-control form-control-sm" placeholder="facebook.com" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"></div>
+                <div class="col-4 col-md-3"><button class="btn btn-primary btn-sm w-100" onclick="addShieldBlocked()">Block</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Allowed Sites -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="check-circle" data-size="18"></i> Allowed Sites (Override)</h5></div>
+        <div class="card-body">
+            <p class="text-muted" style="font-size:12px;">An allowed domain overrides the blocklist. Allowing <code>m.facebook.com</code> un-blocks it even while <code>facebook.com</code> stays blocked.</p>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-2">
+                    <thead><tr><th>Domain</th><th style="width:90px;">&nbsp;</th></tr></thead>
+                    <tbody id="shieldAllowedTbody"><tr><td colspan="2" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+            <div class="row g-2 align-items-end">
+                <div class="col-8 col-md-9"><input type="text" id="shieldAllowedInput" class="form-control form-control-sm" placeholder="m.facebook.com" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"></div>
+                <div class="col-4 col-md-3"><button class="btn btn-success btn-sm w-100" onclick="addShieldAllowed()">Allow</button></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div> <!-- flex-grow-1 content area -->
+
+    <script src="/admin.js?v=59"></script>
+</div> <!-- adminPanel -->
+</body>
+</html>

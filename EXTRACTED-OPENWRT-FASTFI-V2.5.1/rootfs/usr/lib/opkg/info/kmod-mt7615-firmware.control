@@ -1,0 +1,12 @@
+Package: kmod-mt7615-firmware
+Version: 6.6.141.2025.11.06~eb567bc7-r1
+Depends: kernel (=6.6.141~f31f6f85a36836e510d64a18a9a5f1bf-r1), kmod-mac80211, kmod-mt7615e
+Source: feeds/base/kernel/mt76
+SourceName: mt76
+License: BSD-3-Clause-Clear
+Section: kernel
+SourceDateEpoch: 1772622031
+Maintainer: Felix Fietkau <nbd@nbd.name>
+Architecture: mipsel_24kc
+Installed-Size: 604160
+Description:  MediaTek MT7615e firmware

@@ -1,0 +1,10 @@
+{
+  "deviceId": "KSK-001",
+  "siteName": "Main Branch — Poblacion",
+  "timezone": "Asia/Manila",
+  "mikrotik": {
+    "host": "192.168.20.1",
+    "apiUser": "koneksik",
+    "apiPass": "*** stored on ESP32 only ***"
+  }
+}

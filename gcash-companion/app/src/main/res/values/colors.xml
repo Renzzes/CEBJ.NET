@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ks_navy">#0F172A</color>
+    <color name="ks_blue">#2563EB</color>
+    <color name="ks_bg">#F1F5F9</color>
+    <color name="ks_card">#FFFFFF</color>
+    <color name="ks_muted">#64748B</color>
+    <color name="ks_ok">#16A34A</color>
+    <color name="ks_warn">#CA8A04</color>
+    <color name="ks_err">#DC2626</color>
+</resources>

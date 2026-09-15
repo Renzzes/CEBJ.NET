@@ -1,0 +1,13 @@
+[
+  {
+    "id": "TXN-000001",
+    "timestamp": "2026-08-27T10:42:00+08:00",
+    "amount": 10,
+    "paymentMethod": "coin",
+    "planId": "PLAN-001",
+    "durationSeconds": 3600,
+    "status": "completed",
+    "mac": "A4:6C:F1:88:12:3A",
+    "apId": "AP-01"
+  }
+]

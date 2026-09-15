@@ -1,0 +1,25 @@
+ESP Flasher + License (included in Production)
+==============================================
+
+This is the Windows tool that:
+  1. Flashes coinslot firmware to the ESP
+  2. Generates an offline license
+  3. Writes the license to the ESP (no cloud)
+
+First time on this PC:
+  1. Install Python 3 if needed
+  2. Double-click run.bat  (creates .venv + installs deps)
+
+Every ESP unit:
+  1. Plug ESP USB
+  2. run.bat
+  3. Select board + COM port
+  4. Browse firmware\*-firmware.bin (already copied here)
+  5. Flash + License (full provision)
+
+Keep keys\ private — that is your signing key.
+
+Optional .exe (no Python needed to run):
+  Double-click BUILD-EXE.bat in esp-license-provisioner\
+  Then open KonekSik-ESP-Flasher\KonekSik-ESP-Flasher.exe
+  START-FLASHER.bat prefers the .exe when present.

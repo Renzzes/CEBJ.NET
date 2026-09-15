@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="These must be allowed on the same phone that receives GCash notifications."
+            android:textColor="@color/ks_muted" />
+
+        <TextView
+            android:id="@+id/txtNotifStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Notification access: unknown"
+            android:textColor="@color/ks_navy" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnNotifAccess"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/open_notif_access" />
+
+        <TextView
+            android:id="@+id/txtSmsStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="SMS permission: unknown"
+            android:textColor="@color/ks_navy" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSms"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/request_sms" />
+
+        <TextView
+            android:id="@+id/txtBatteryStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Battery optimization: unknown"
+            android:textColor="@color/ks_navy" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnBattery"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/battery_opt" />
+    </LinearLayout>
+</ScrollView>

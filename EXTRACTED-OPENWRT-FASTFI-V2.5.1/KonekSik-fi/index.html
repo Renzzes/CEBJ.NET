@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KonekSik-fi — Sign in</title>
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/login.css" />
+</head>
+<body class="is-login">
+<script>
+  try {
+    if (sessionStorage.getItem("ksk_auth")) document.body.className = "is-app";
+  } catch (e) {}
+</script>
+  <div id="login-screen">
+    <div class="login-bg-grid"></div>
+    <div class="fail-flash" id="fail-flash"></div>
+
+    <div class="login-wrap" id="login-wrap">
+      <img class="login-logo" id="login-logo" src="public/Logo.png" alt="KonekSik-fi — Connect Access Enjoy" />
+      <div class="login-glow">
+      <form class="login-card" id="login-form" autocomplete="off">
+        <h1>Admin Console</h1>
+        <p class="sub">Sign in to manage your Piso WiFi network.</p>
+
+        <div class="field">
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" required autofocus />
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="pw-wrap">
+            <input id="password" name="password" type="password" required />
+            <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Show password">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="error-msg" id="login-error"></div>
+        <button class="btn-login" id="login-btn" type="submit">Sign in</button>
+        <p class="login-foot">KonekSik-fi · Local Admin (ESP32) · UI prototype</p>
+      </form>
+      </div>
+    </div>
+
+    <div class="success-overlay" id="success-overlay">
+      <div class="success-ring">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12.5l5 5L20 7"/>
+        </svg>
+      </div>
+      <h2>Welcome back</h2>
+      <p>Opening the Admin Console…</p>
+    </div>
+  </div>
+
+  <div id="app-screen">
+    <div class="sidebar-overlay" id="sidebar-overlay" data-action="close-sidebar"></div>
+
+    <div class="app">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-logo-wrap has-image" id="nav-logo-wrap">
+            <img class="brand-logo" id="nav-logo" src="public/navbar.png" alt="KonekSik-fi" />
+          </div>
+          <div class="brand-copy">
+            <h1>KonekSik-fi</h1>
+            <span>Admin Console</span>
+          </div>
+        </div>
+        <nav class="nav" id="sidebar-nav"></nav>
+        <div class="sidebar-foot">
+          <button class="nav-item" data-action="reboot">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v6h6"/></svg>
+            <span>Reboot</span>
+          </button>
+          <button class="nav-item danger" data-action="logout">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 7V5a2 2 0 0 1 2-2h7v18h-7a2 2 0 0 1-2-2v-2"/><path d="M4 12h11M12 9l3 3-3 3"/></svg>
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+
+      <div class="main">
+        <header class="header">
+          <div class="header-left" style="display:flex;align-items:center">
+            <button class="icon-btn menu-btn" data-action="toggle-sidebar" aria-label="Open menu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            </button>
+            <div>
+              <div class="page-title" id="page-title">Dashboard</div>
+              <div class="page-crumb" id="page-crumb">Overview of your KonekSik-fi system</div>
+            </div>
+          </div>
+          <div class="header-right">
+            <div class="conn-pills">
+              <div class="conn-pill"><span class="live-dot"></span><span class="label">MikroTik</span> Online</div>
+              <div class="conn-pill"><span class="live-dot"></span><span class="label">Controller</span> Online</div>
+            </div>
+            <div class="rel">
+              <button class="icon-btn" data-action="toggle-notifs" aria-label="Notifications">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+                <span class="notif-count" id="notif-count">2</span>
+              </button>
+              <div class="dropdown" id="notif-dd"></div>
+            </div>
+            <div class="rel">
+              <button class="profile-btn" data-action="toggle-profile">
+                <span class="avatar">A</span>
+                <span>Admin</span>
+              </button>
+              <div class="dropdown" id="profile-dd"></div>
+            </div>
+          </div>
+        </header>
+        <main class="content" id="page-content"></main>
+      </div>
+    </div>
+
+    <div class="boot-overlay" id="boot-overlay">
+      <div>
+        <div class="spinner"></div>
+        <h3>Restarting controller</h3>
+        <p style="color:#cbd5e1;margin-top:6px">This is a simulated reboot for the UI prototype.</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/mikrotik-live.js"></script>
+  <script src="js/branding.js"></script>
+  <script src="js/components.js"></script>
+  <script src="js/pages.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/login.js"></script>
+</body>
+</html>

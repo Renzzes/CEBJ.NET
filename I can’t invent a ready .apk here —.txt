@@ -1,0 +1,14 @@
+I can’t invent a ready .apk here — this PC has no Java and no Android SDK, so the app can’t be compiled on this machine right now.
+
+You don’t need Android Studio forever. You only need a build once on any PC, then you keep/copy the .apk like any installer.
+
+Lightest path
+On one PC (office or laptop), install Android Studio once (or JDK + Android command-line tools).
+Open gcash-companion\ → Build APK.
+Take the file: gcash-companion\app\build\outputs\apk\debug\app-debug.apk
+Rename/copy it to phones and to: KonekSik-fi Piso Wifi Production\03-GCASH-COMPANION\KonekSik-GCash-Companion.apk
+After that: sideload that .apk only — no Android Studio on other PCs.
+Install on the operator phone
+Copy the .apk to the phone → open it → allow “Install unknown apps” if asked.
+Customers never install it.
+If you want, on a PC that already has Android Studio (or after you install JDK), ask me to run the build and drop the .apk into the Production folder for you.

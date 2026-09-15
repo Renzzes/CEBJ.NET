@@ -1,0 +1,9 @@
+GCash Companion — OPERATOR PHONE ONLY
+-------------------------------------
+Customers do NOT install this.
+
+1. Install the APK on the phone that receives GCash.
+2. Admin → GCash → secret + export pool.
+3. App Setup → secret, router URL, import JSON.
+4. Enable notification + SMS permissions.
+5. Status → listening ON.

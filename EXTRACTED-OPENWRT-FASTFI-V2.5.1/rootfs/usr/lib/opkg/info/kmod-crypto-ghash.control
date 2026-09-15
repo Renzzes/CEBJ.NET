@@ -1,0 +1,13 @@
+Package: kmod-crypto-ghash
+Version: 6.6.141-r1
+Depends: kernel (=6.6.141~f31f6f85a36836e510d64a18a9a5f1bf-r1), kmod-crypto-gf128, kmod-crypto-hash
+Source: feeds/base/kernel/linux
+SourceName: kernel
+License: GPL-2.0-only
+LicenseFiles: COPYING
+Section: kernel
+SourceDateEpoch: 1779897308
+CPE-ID: cpe:/o:linux:linux_kernel
+Architecture: mipsel_24kc
+Installed-Size: 10240
+Description:  GHASH digest CryptoAPI module

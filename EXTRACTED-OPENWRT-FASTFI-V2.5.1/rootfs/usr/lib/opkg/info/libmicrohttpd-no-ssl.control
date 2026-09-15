@@ -1,0 +1,16 @@
+Package: libmicrohttpd-no-ssl
+Version: 1.0.1-r1
+Depends: libc
+Provides: libmicrohttpd
+Source: feeds/packages/libs/libmicrohttpd
+SourceName: libmicrohttpd
+License: LGPL-2.1-or-later
+LicenseFiles: COPYING
+Section: libs
+SourceDateEpoch: 1787150268
+URL: https://www.gnu.org/software/libmicrohttpd/
+CPE-ID: cpe:/a:gnu:libmicrohttpd
+Maintainer: Alexander Couzens <lynxis@fe80.eu>
+Architecture: mipsel_24kc
+Installed-Size: 143360
+Description:  GNU libmicrohttpd is an embbeded HTTP server library

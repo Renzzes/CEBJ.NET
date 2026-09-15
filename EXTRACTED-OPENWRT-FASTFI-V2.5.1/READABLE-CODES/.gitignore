@@ -1,0 +1,54 @@
+# ── Build outputs (large / regenerable — never track) ──
+# Firmware images and their checksums
+*.img.gz
+*.img
+*.img.gz.sha256
+*.img.sha256
+*.bin
+*.bin.sha256
+# Per-variant package manifest + CycloneDX SBOM copied next to the .bin by
+# build-image.sh (provenance sidecars; regenerable from the ImageBuilder).
+*.bin.manifest
+*.bin.bom.cdx.json
+
+# OpenWrt ImageBuilder tree extracted into build/ (~350 MB).
+build/openwrt-imagebuilder-*/
+build/*.tar.zst
+build/*.tar
+
+# OTA update bundle (regenerated from VERSION + overlay)
+update.tar.gz
+update.tar.gz.sha256
+
+# Build logs
+*.log
+
+# Compiled ESP coinslot artifacts (keep fastfi-coinslot/*.ino source)
+fastfi-coinslot/build/
+fastfi-coinslot-lanbase/build/
+
+# ── Runtime / local state ──
+# SQLite DBs and runtime state created on the device, not source
+www/data/
+www/fw_progress.log
+
+# Local Claude Code tooling state
+.claude/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# ── Companion Android app ──
+# Keep source (app/src, *.gradle, gradle wrapper). Exclude build outputs, the
+# gradle cache, and local.properties (holds the local Android SDK path).
+companion-app/app/build/
+companion-app/.gradle/
+companion-app/local.properties
+
+# Stray 22 MB archive blob — not source
+companion-app.rar.db
+
+# Python bytecode (tools/fastfi-harden.py etc.) and stray Windows exes.
+*.pyc
+*.exe

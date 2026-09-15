@@ -1,0 +1,23 @@
+{
+  "id": "esp32_w5500",
+  "name": "ESP32 + W5500 Ethernet",
+  "chip": "esp32",
+  "network": "w5500",
+  "wireless": false,
+  "esptool_chip": "esp32",
+  "flash_mode": "dio",
+  "flash_freq": "40m",
+  "flash_size": "4MB",
+  "default_firmware": "firmware/esp32_w5500.bin",
+  "notes": "ESP32 DevKit-style + W5500 SPI module. Adjust GPIOs in board header if your PCB differs.",
+  "pins": {
+    "coin_primary": { "gpio": 34, "label": "GPIO34", "role": "Coin pulse (primary, input-only)" },
+    "coin_backup": { "gpio": 35, "label": "GPIO35", "role": "Coin pulse (backup, input-only)" },
+    "relay": { "gpio": 26, "label": "GPIO26", "role": "Relay" },
+    "led": { "gpio": 2, "label": "GPIO2", "role": "Status LED" },
+    "w5500_cs": { "gpio": 5, "label": "GPIO5", "role": "W5500 CS" },
+    "w5500_sclk": { "gpio": 18, "label": "GPIO18", "role": "W5500 SCLK" },
+    "w5500_miso": { "gpio": 19, "label": "GPIO19", "role": "W5500 MISO" },
+    "w5500_mosi": { "gpio": 23, "label": "GPIO23", "role": "W5500 MOSI" }
+  }
+}

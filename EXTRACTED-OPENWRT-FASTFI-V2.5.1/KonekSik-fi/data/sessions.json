@@ -1,0 +1,13 @@
+[
+  {
+    "id": "SES-000001",
+    "mac": "A4:6C:F1:88:12:3A",
+    "ip": "192.168.10.21",
+    "planId": "PLAN-001",
+    "startTime": "2026-08-27T10:42:00+08:00",
+    "expirationTime": "2026-08-27T11:42:00+08:00",
+    "status": "active",
+    "downloadBytes": 0,
+    "uploadBytes": 0
+  }
+]

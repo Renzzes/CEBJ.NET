@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+keys/*.pem
+keys/*.key
+!keys/.gitkeep
+logs/*.csv
+logs/*.jsonl
+!logs/.gitkeep
+firmware/*.bin
+!firmware/.gitkeep
+config.json
+*.spec
+dist/
+build/

@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "generated_at": 1710000000,
+  "gcash_number": "09171234567",
+  "packages": [
+    { "price": 5, "minutes": 30, "codes": ["DEMO5A", "DEMO5B", "DEMO5C"] },
+    { "price": 10, "minutes": 60, "codes": ["DEMO10A", "DEMO10B"] },
+    { "price": 20, "minutes": 150, "codes": ["DEMO20A"] }
+  ],
+  "total_codes": 6
+}

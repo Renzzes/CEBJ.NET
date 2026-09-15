@@ -1,0 +1,162 @@
+#!/bin/sh
+# FastFi V6 rc.local — Every-Boot Safety Checks
+# Last Updated: May 5, 2026
+#
+# IMPORTANT: First-boot configuration is handled by /etc/uci-defaults/99-fastfi-setup
+# This file only contains safety checks that run on EVERY boot.
+
+# ══════════════════════════════════════════════════════
+# EVERY-BOOT SAFETY CHECKS
+# ══════════════════════════════════════════════════════
+
+# Quick sanity check: verify critical binaries exist
+# (Fast — checks binaries, not opkg database)
+_boot_missing=""
+for bin in lua sqlite3 curl ndsctl uhttpd; do
+    which "$bin" >/dev/null 2>&1 || _boot_missing="$_boot_missing $bin"
+done
+
+# Check ca-bundle (no binary, so we check the cert file)
+[ -f /etc/ssl/certs/ca-certificates.crt ] || _boot_missing="$_boot_missing ca-bundle"
+
+
+if [ -n "$_boot_missing" ]; then
+    logger -t fastfi "WARNING: Missing binaries:$_boot_missing — attempting auto-repair..."
+    if ping -c 1 -W 3 8.8.8.8 >/dev/null 2>&1; then
+        sed -i 's|https://|http://|g' /etc/opkg/distfeeds.conf 2>/dev/null
+        opkg update >/dev/null 2>&1
+        # Map binary names to package names
+        echo "$_boot_missing" | grep -q "lua" && opkg install lua lsqlite3 >/dev/null 2>&1
+        echo "$_boot_missing" | grep -q "sqlite3" && opkg install sqlite3-cli >/dev/null 2>&1
+        echo "$_boot_missing" | grep -q "curl" && opkg install curl >/dev/null 2>&1
+        echo "$_boot_missing" | grep -q "ndsctl" && opkg install nodogsplash >/dev/null 2>&1
+        echo "$_boot_missing" | grep -q "uhttpd" && opkg install uhttpd uhttpd-mod-ubus cgi-io >/dev/null 2>&1
+        echo "$_boot_missing" | grep -q "ca-bundle" && opkg install ca-bundle >/dev/null 2>&1
+        logger -t fastfi "Auto-repair complete."
+    else
+        logger -t fastfi "No internet — cannot auto-repair. Missing:$_boot_missing"
+    fi
+fi
+
+# NAT masquerade for LAN subnet (belt-and-suspenders with firewall zone masq)
+# Discover actual WAN device — falls back to 'wan' if unset (single-Ethernet boards may use a USB NIC).
+WAN_DEV=$(uci -q get network.wan.device 2>/dev/null || echo "wan")
+[ -z "$WAN_DEV" ] && WAN_DEV="wan"
+# For PPPoE the live L3 egress is pppoe-wan (the ppp netdev), not the underlying eth.
+WAN_PROTO=$(uci -q get network.wan.proto 2>/dev/null || echo "")
+if [ "$WAN_PROTO" = "pppoe" ]; then
+    iptables -t nat -C POSTROUTING -s 10.0.0.0/24 -o pppoe-wan -j MASQUERADE 2>/dev/null || \
+    iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o pppoe-wan -j MASQUERADE 2>/dev/null
+fi
+iptables -t nat -C POSTROUTING -s 10.0.0.0/24 -o "$WAN_DEV" -j MASQUERADE 2>/dev/null || \
+iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o "$WAN_DEV" -j MASQUERADE
+
+# File permissions safety net (fixes Windows→Linux NTFS permission stripping)
+chmod +x /www/cgi-bin/api 2>/dev/null
+chmod +x /etc/init.d/fastfi 2>/dev/null
+mkdir -p /www/data
+mkdir -p /tmp/fastfi_state
+mkdir -p /tmp/fastfi_sessions
+
+# Ensure nodogsplash has preauthenticated rules (if installed)
+if uci -q get nodogsplash.@nodogsplash[0] >/dev/null 2>&1; then
+    GW_IP=$(uci -q get network.lan.ipaddr 2>/dev/null || echo "10.0.0.1")
+    _nds_changed=0
+    if ! uci get nodogsplash.@nodogsplash[0].preauthenticated_users 2>/dev/null | grep -q "allow tcp port 80"; then
+        uci add_list nodogsplash.@nodogsplash[0].preauthenticated_users="allow tcp port 80 to $GW_IP"
+        uci add_list nodogsplash.@nodogsplash[0].preauthenticated_users="allow tcp port 443 to $GW_IP"
+        _nds_changed=1
+    fi
+    # users_to_router defaults to BLOCK. Without udp 67 (DHCP) + 53 (DNS),
+    # unauthenticated clients never complete DHCP ("stuck obtaining IP address").
+    # Ensure these are present on every boot.
+    for _rule in "allow udp port 67" "allow udp port 53" "allow tcp port 53" "allow tcp port 80" "allow tcp port 443"; do
+        if ! uci get nodogsplash.@nodogsplash[0].users_to_router 2>/dev/null | grep -q "$_rule"; then
+            uci add_list nodogsplash.@nodogsplash[0].users_to_router="$_rule"
+            _nds_changed=1
+        fi
+    done
+    if [ "$_nds_changed" = "1" ]; then
+        uci commit nodogsplash
+        /etc/init.d/nodogsplash restart 2>/dev/null
+    fi
+    if ! pidof nodogsplash >/dev/null 2>&1; then
+        sleep 3
+        /etc/init.d/nodogsplash start 2>/dev/null
+    fi
+fi
+
+# Safety net: ensure /www/data is a symlink into /etc/fastfi/data (not a real,
+# web-served dir). See fastfi-data-dir.sh + uhttpd no_symlinks.
+/usr/libexec/fastfi/core/fastfi-data-dir.sh 2>/dev/null || true
+
+# Ensure FastFi service is running
+if ! pgrep -f core-loop >/dev/null 2>&1; then
+    /etc/init.d/fastfi start 2>/dev/null
+fi
+
+# Ensure uhttpd (web server) is running
+if ! pidof uhttpd >/dev/null 2>&1; then
+    /etc/init.d/uhttpd start 2>/dev/null
+fi
+
+# Restore Anti-Tethering state (with robust wait for DB and firewall)
+(
+    # Wait for DB to be initialized
+    _WAIT=0
+    while [ ! -f /www/data/bindcode.db ] && [ $_WAIT -lt 30 ]; do
+        sleep 1
+        _WAIT=$((_WAIT + 1))
+    done
+
+    # Additional delay to ensure firewall is fully settled
+    sleep 20
+    
+    ANTI_TETHER=$(sqlite3 /www/data/bindcode.db "SELECT anti_tethering FROM config LIMIT 1;" 2>/dev/null)
+    if [ "$ANTI_TETHER" = "1" ]; then
+        /usr/libexec/fastfi/core/fastfi-antitether.sh enable >/dev/null 2>&1
+        logger -t fastfi "Boot: Anti-hotspot rules reapplied (status: enabled)"
+    fi
+) &
+
+# Re-apply FastFi Shield (site/Starlink blocking, force-DNS, DoH, QUIC) on every
+# boot. The engine self-seeds its JSON lists + the dnsmasq confdir, then renders
+# the block config + nft ruleset; the starlink-sync repopulates the IP set.
+# Backgrounded like anti-tether so boot isn't blocked, and after the same
+# wait-for-DB + settle delay so nft/dnsmasq are ready.
+(
+    _SW=0
+    while [ ! -f /www/data/bindcode.db ] && [ $_SW -lt 30 ]; do
+        sleep 1
+        _SW=$((_SW + 1))
+    done
+    sleep 20
+    /usr/bin/env lua /usr/libexec/fastfi/core/fastfi-shield.lua >/dev/null 2>&1
+    /usr/bin/env lua /usr/libexec/fastfi/core/fastfi-starlink-sync.lua >/dev/null 2>&1
+    logger -t fastfi "Boot: FastFi Shield reapplied"
+) &
+
+
+# Auto-reconnect VPN on boot if it was previously enabled
+if [ -f "/etc/fastfi_vpn_enabled" ]; then
+    (
+        sleep 30 # Give WAN time to come up
+        /usr/libexec/fastfi/services/fastfi-vpn.sh --force >/dev/null 2>&1
+        logger -t fastfi "Boot: VPN auto-reconnect triggered"
+    ) &
+fi
+
+# Post-OTA rollback watchdog (Item 4). One-shot: if /etc/fastfi/ota_pending
+# exists (written by fastfi-ota.sh before an apply), health-check the box for
+# up to 5 minutes and auto-restore the pre-OTA backup if it comes up broken.
+# No-op on a normal boot (no marker). Backgrounded so boot isn't blocked; the
+# watchdog does its own waiting. Marker is on persistent storage because /tmp
+# is cleared on the post-apply reboot.
+if [ -f /etc/fastfi/ota_pending ]; then
+    (
+        /usr/libexec/fastfi/jobs/fastfi-rollback-watchdog.sh >/dev/null 2>&1
+        logger -t fastfi "Boot: post-OTA rollback watchdog finished"
+    ) &
+fi
+
+exit 0

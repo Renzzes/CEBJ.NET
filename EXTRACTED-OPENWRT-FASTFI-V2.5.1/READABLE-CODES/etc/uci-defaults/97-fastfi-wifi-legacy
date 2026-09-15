@@ -1,0 +1,42 @@
+#!/bin/sh
+# FastFi V6 — one-time migration: force the 2.4 GHz radio to legacy (NOHT).
+#
+# Guarantees ESP8266 coinslots (802.11 b/g/n, 2.4 GHz-only, no ax) reliably
+# associate with the router's FastFi-Private SSID. Wi-Fi 6 (HE) on the 2.4 GHz
+# radio is backwards-compatible in theory, but many ESP8266 firmwares fail to
+# join an ax AP. The 5 GHz radio is left on HE/ax for customer throughput;
+# 2.4 GHz becomes the coinslot / legacy band (802.11g's 54 Mbps is plenty for
+# coinslots and 2.4 GHz-only customer devices). legacy_rates advertises the
+# 802.11b base rates too for the oldest clients.
+#
+# Why a separate file (not in 99): uci-defaults self-delete (overlay whiteout)
+# on exit 0 and sysupgrade preserves /etc/config/wireless + the overlay. So on
+# a unit that already booted, 99-fastfi-setup is whited-out and a plain
+# sysupgrade would NOT re-run its STEP 6 legacy block. This file has a distinct
+# name so it is NOT whited-out and DOES run on the next boot after a plain
+# sysupgrade, applying legacy mode to already-deployed units without a factory
+# reset. On a unit already in legacy mode it just re-writes the same values.
+#
+# Targets already-booted units, whose /etc/config/wireless is persisted in the
+# overlay, so no radio-detect wait is needed (unlike 99's STEP 6, which must
+# wait for the ieee80211 hotplug on a fresh first boot). Fresh installs are
+# handled by 99's STEP 6; if this ever runs on a fresh boot before the radios
+# appear it simply no-ops and 99 sets legacy after its bounded wait.
+#
+# Idempotent; runs once (self-deletes on exit 0). No-op on boards with no
+# 2.4 GHz radio.
+
+_changed=0
+for radio in $(uci show wireless 2>/dev/null | grep '=wifi-device' | cut -d'=' -f1); do
+    _band=$(uci -q get "${radio}".band 2>/dev/null)
+    _hw=$(uci -q get "${radio}".hwmode 2>/dev/null)
+    if [ "$_band" = "2g" ] || [ "$_hw" = "11g" ] || [ "$_hw" = "11b" ]; then
+        uci set "${radio}".htmode='NOHT'
+        uci set "${radio}".legacy_rates='1'
+        echo "[FastFi migrate] 2.4 GHz radio (${radio}) -> legacy (NOHT)."
+        _changed=1
+    fi
+done
+
+[ "$_changed" = "1" ] && uci commit wireless
+exit 0

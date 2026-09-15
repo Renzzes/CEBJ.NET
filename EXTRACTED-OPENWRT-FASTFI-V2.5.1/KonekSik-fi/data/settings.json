@@ -1,0 +1,8 @@
+{
+  "systemName": "KonekSik-fi",
+  "locationName": "Main Branch — Poblacion",
+  "theme": "light",
+  "compactMode": false,
+  "sessionTimeout": "30 minutes",
+  "dashboardRefreshSeconds": 15
+}

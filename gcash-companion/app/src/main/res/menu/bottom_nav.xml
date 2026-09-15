@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_home"
+        android:icon="@android:drawable/ic_menu_info_details"
+        android:title="@string/home_title" />
+    <item
+        android:id="@+id/nav_setup"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:title="@string/setup_title" />
+    <item
+        android:id="@+id/nav_perm"
+        android:icon="@android:drawable/ic_lock_lock"
+        android:title="@string/perm_title" />
+</menu>

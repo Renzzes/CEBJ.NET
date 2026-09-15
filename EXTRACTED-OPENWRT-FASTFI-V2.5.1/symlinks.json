@@ -1,0 +1,994 @@
+[
+  {
+    "path": "/bin/ash",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/cat",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/chgrp",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/chmod",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/chown",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/cp",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/date",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/dd",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/df",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/dmesg",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/echo",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/egrep",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/false",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/fgrep",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/fsync",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/grep",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/gunzip",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/gzip",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/kill",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/ln",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/lock",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/login",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/ls",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/mkdir",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/mknod",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/mktemp",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/mount",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/mv",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/netmsg",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/netstat",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/nice",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/passwd",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/pidof",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/ping",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/ping6",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/ps",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/pwd",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/rm",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/rmdir",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/sed",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/sh",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/sleep",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/sync",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/tar",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/touch",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/traceroute",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/traceroute6",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/true",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/umount",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/uname",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/vi",
+    "target": "busybox"
+  },
+  {
+    "path": "/bin/zcat",
+    "target": "busybox"
+  },
+  {
+    "path": "/etc/TZ",
+    "target": "/tmp/TZ"
+  },
+  {
+    "path": "/etc/localtime",
+    "target": "/tmp/localtime"
+  },
+  {
+    "path": "/etc/modules-boot.d/02-crypto-hash",
+    "target": "../modules.d/02-crypto-hash"
+  },
+  {
+    "path": "/etc/modules-boot.d/04-crypto-crc32c",
+    "target": "../modules.d/04-crypto-crc32c"
+  },
+  {
+    "path": "/etc/modules-boot.d/09-crypto-aead",
+    "target": "../modules.d/09-crypto-aead"
+  },
+  {
+    "path": "/etc/modules-boot.d/09-crypto-manager",
+    "target": "../modules.d/09-crypto-manager"
+  },
+  {
+    "path": "/etc/modules-boot.d/30-gpio-button-hotplug",
+    "target": "../modules.d/30-gpio-button-hotplug"
+  },
+  {
+    "path": "/etc/modules-boot.d/60-leds-gpio",
+    "target": "../modules.d/60-leds-gpio"
+  },
+  {
+    "path": "/etc/mtab",
+    "target": "/proc/mounts"
+  },
+  {
+    "path": "/etc/os-release",
+    "target": "../usr/lib/os-release"
+  },
+  {
+    "path": "/etc/ppp/resolv.conf",
+    "target": "/tmp/resolv.conf.ppp"
+  },
+  {
+    "path": "/etc/rc.d/K10fastfi",
+    "target": "../init.d/fastfi"
+  },
+  {
+    "path": "/etc/rc.d/K10gpio_switch",
+    "target": "../init.d/gpio_switch"
+  },
+  {
+    "path": "/etc/rc.d/K10openvpn",
+    "target": "../init.d/openvpn"
+  },
+  {
+    "path": "/etc/rc.d/K21wpad",
+    "target": "../init.d/wpad"
+  },
+  {
+    "path": "/etc/rc.d/K50dropbear",
+    "target": "../init.d/dropbear"
+  },
+  {
+    "path": "/etc/rc.d/K85odhcpd",
+    "target": "../init.d/odhcpd"
+  },
+  {
+    "path": "/etc/rc.d/K89log",
+    "target": "../init.d/log"
+  },
+  {
+    "path": "/etc/rc.d/K90boot",
+    "target": "../init.d/boot"
+  },
+  {
+    "path": "/etc/rc.d/K90network",
+    "target": "../init.d/network"
+  },
+  {
+    "path": "/etc/rc.d/K90sysfixtime",
+    "target": "../init.d/sysfixtime"
+  },
+  {
+    "path": "/etc/rc.d/K90umount",
+    "target": "../init.d/umount"
+  },
+  {
+    "path": "/etc/rc.d/K95nodogsplash",
+    "target": "../init.d/nodogsplash"
+  },
+  {
+    "path": "/etc/rc.d/S00sysfixtime",
+    "target": "../init.d/sysfixtime"
+  },
+  {
+    "path": "/etc/rc.d/S00urngd",
+    "target": "../init.d/urngd"
+  },
+  {
+    "path": "/etc/rc.d/S10boot",
+    "target": "../init.d/boot"
+  },
+  {
+    "path": "/etc/rc.d/S10system",
+    "target": "../init.d/system"
+  },
+  {
+    "path": "/etc/rc.d/S11sysctl",
+    "target": "../init.d/sysctl"
+  },
+  {
+    "path": "/etc/rc.d/S12log",
+    "target": "../init.d/log"
+  },
+  {
+    "path": "/etc/rc.d/S19dnsmasq",
+    "target": "../init.d/dnsmasq"
+  },
+  {
+    "path": "/etc/rc.d/S19dropbear",
+    "target": "../init.d/dropbear"
+  },
+  {
+    "path": "/etc/rc.d/S19firewall",
+    "target": "../init.d/firewall"
+  },
+  {
+    "path": "/etc/rc.d/S19wpad",
+    "target": "../init.d/wpad"
+  },
+  {
+    "path": "/etc/rc.d/S20network",
+    "target": "../init.d/network"
+  },
+  {
+    "path": "/etc/rc.d/S25packet_steering",
+    "target": "../init.d/packet_steering"
+  },
+  {
+    "path": "/etc/rc.d/S35odhcpd",
+    "target": "../init.d/odhcpd"
+  },
+  {
+    "path": "/etc/rc.d/S50cron",
+    "target": "../init.d/cron"
+  },
+  {
+    "path": "/etc/rc.d/S50sqm",
+    "target": "../init.d/sqm"
+  },
+  {
+    "path": "/etc/rc.d/S50uhttpd",
+    "target": "../init.d/uhttpd"
+  },
+  {
+    "path": "/etc/rc.d/S90openvpn",
+    "target": "../init.d/openvpn"
+  },
+  {
+    "path": "/etc/rc.d/S94gpio_switch",
+    "target": "../init.d/gpio_switch"
+  },
+  {
+    "path": "/etc/rc.d/S95done",
+    "target": "../init.d/done"
+  },
+  {
+    "path": "/etc/rc.d/S95nodogsplash",
+    "target": "../init.d/nodogsplash"
+  },
+  {
+    "path": "/etc/rc.d/S96led",
+    "target": "../init.d/led"
+  },
+  {
+    "path": "/etc/rc.d/S98sysntpd",
+    "target": "../init.d/sysntpd"
+  },
+  {
+    "path": "/etc/rc.d/S99bootcount",
+    "target": "../init.d/bootcount"
+  },
+  {
+    "path": "/etc/rc.d/S99fastfi",
+    "target": "../init.d/fastfi"
+  },
+  {
+    "path": "/etc/rc.d/S99ubihealthd",
+    "target": "../init.d/ubihealthd"
+  },
+  {
+    "path": "/etc/rc.d/S99urandom_seed",
+    "target": "../init.d/urandom_seed"
+  },
+  {
+    "path": "/etc/resolv.conf",
+    "target": "/tmp/resolv.conf"
+  },
+  {
+    "path": "/etc/ssl/cert.pem",
+    "target": "/etc/ssl/certs/ca-certificates.crt"
+  },
+  {
+    "path": "/lib/ld-musl-mipsel-sf.so.1",
+    "target": "libc.so"
+  },
+  {
+    "path": "/lib/libatomic.so.1",
+    "target": "libatomic.so.1.2.0"
+  },
+  {
+    "path": "/sbin/fw3",
+    "target": "fw4"
+  },
+  {
+    "path": "/sbin/halt",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/hwclock",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/ifconfig",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/ifdown",
+    "target": "ifup"
+  },
+  {
+    "path": "/sbin/insmod",
+    "target": "/sbin/kmodloader"
+  },
+  {
+    "path": "/sbin/ip",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/jffs2mark",
+    "target": "jffs2reset"
+  },
+  {
+    "path": "/sbin/logread",
+    "target": "/usr/libexec/logread-ubox"
+  },
+  {
+    "path": "/sbin/lsmod",
+    "target": "/sbin/kmodloader"
+  },
+  {
+    "path": "/sbin/mkswap",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/modinfo",
+    "target": "/sbin/kmodloader"
+  },
+  {
+    "path": "/sbin/modprobe",
+    "target": "/sbin/kmodloader"
+  },
+  {
+    "path": "/sbin/pivot_root",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/poweroff",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/reboot",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/rmmod",
+    "target": "/sbin/kmodloader"
+  },
+  {
+    "path": "/sbin/route",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/seccomp-trace",
+    "target": "utrace"
+  },
+  {
+    "path": "/sbin/start-stop-daemon",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/swapoff",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/swapon",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/switch_root",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/sysctl",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/sbin/tc",
+    "target": "/usr/libexec/tc-tiny"
+  },
+  {
+    "path": "/sbin/udhcpc",
+    "target": "../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/[",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/[[",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/awk",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/basename",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/clear",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/cmp",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/crontab",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/cut",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/dbclient",
+    "target": "../sbin/dropbear"
+  },
+  {
+    "path": "/usr/bin/dirname",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/dropbearkey",
+    "target": "../sbin/dropbear"
+  },
+  {
+    "path": "/usr/bin/du",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/env",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/expr",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/find",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/flock",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/free",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/head",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/hexdump",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/id",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/killall",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/ldd",
+    "target": "../../lib/libc.so"
+  },
+  {
+    "path": "/usr/bin/less",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/logger",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/lua",
+    "target": "lua5.1"
+  },
+  {
+    "path": "/usr/bin/md5sum",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/mkfifo",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/nc",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/nslookup",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/pgrep",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/printf",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/readlink",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/reset",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/resize",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/scp",
+    "target": "/usr/sbin/dropbear"
+  },
+  {
+    "path": "/usr/bin/seq",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/setsid",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/sha256sum",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/signify",
+    "target": "usign"
+  },
+  {
+    "path": "/usr/bin/sort",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/ssh",
+    "target": "/usr/sbin/dropbear"
+  },
+  {
+    "path": "/usr/bin/ssh-keygen",
+    "target": "/usr/sbin/dropbear"
+  },
+  {
+    "path": "/usr/bin/strings",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/tail",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/taskset",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/tee",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/test",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/time",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/timeout",
+    "target": "/usr/libexec/timeout-coreutils"
+  },
+  {
+    "path": "/usr/bin/top",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/tr",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/ucc",
+    "target": "ucode"
+  },
+  {
+    "path": "/usr/bin/uniq",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/uptime",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/utpl",
+    "target": "ucode"
+  },
+  {
+    "path": "/usr/bin/wc",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/wget",
+    "target": "/bin/uclient-fetch"
+  },
+  {
+    "path": "/usr/bin/which",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/xargs",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/bin/yes",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/lib/libcap-ng.so",
+    "target": "libcap-ng.so.0.0.0"
+  },
+  {
+    "path": "/usr/lib/libcap-ng.so.0",
+    "target": "libcap-ng.so.0.0.0"
+  },
+  {
+    "path": "/usr/lib/libcurl.so.4",
+    "target": "libcurl.so.4.8.0"
+  },
+  {
+    "path": "/usr/lib/libedit.so.0",
+    "target": "libedit.so.0.0.75"
+  },
+  {
+    "path": "/usr/lib/libform.so.6",
+    "target": "libformw.so.6"
+  },
+  {
+    "path": "/usr/lib/libform.so.6.4",
+    "target": "libformw.so.6.4"
+  },
+  {
+    "path": "/usr/lib/libformw.so.6",
+    "target": "libformw.so.6.4"
+  },
+  {
+    "path": "/usr/lib/libjansson.so.4",
+    "target": "libjansson.so.4.14.0"
+  },
+  {
+    "path": "/usr/lib/libjson-c.so.5",
+    "target": "libjson-c.so.5.4.0"
+  },
+  {
+    "path": "/usr/lib/liblz4.so.1",
+    "target": "liblz4.so.1.10.0"
+  },
+  {
+    "path": "/usr/lib/liblzo2.so.2",
+    "target": "liblzo2.so.2.0.0"
+  },
+  {
+    "path": "/usr/lib/libmbedcrypto.so.16",
+    "target": "libmbedcrypto.so.3.6.6"
+  },
+  {
+    "path": "/usr/lib/libmbedtls.so.21",
+    "target": "libmbedtls.so.3.6.6"
+  },
+  {
+    "path": "/usr/lib/libmbedx509.so.7",
+    "target": "libmbedx509.so.3.6.6"
+  },
+  {
+    "path": "/usr/lib/libmenu.so.6",
+    "target": "libmenuw.so.6"
+  },
+  {
+    "path": "/usr/lib/libmenu.so.6.4",
+    "target": "libmenuw.so.6.4"
+  },
+  {
+    "path": "/usr/lib/libmenuw.so.6",
+    "target": "libmenuw.so.6.4"
+  },
+  {
+    "path": "/usr/lib/libmicrohttpd.so",
+    "target": "libmicrohttpd.so.12.62.1"
+  },
+  {
+    "path": "/usr/lib/libmicrohttpd.so.12",
+    "target": "libmicrohttpd.so.12.62.1"
+  },
+  {
+    "path": "/usr/lib/libmnl.so.0",
+    "target": "libmnl.so.0.2.0"
+  },
+  {
+    "path": "/usr/lib/libncurses.so.6",
+    "target": "libncursesw.so.6"
+  },
+  {
+    "path": "/usr/lib/libncurses.so.6.4",
+    "target": "libncursesw.so.6.4"
+  },
+  {
+    "path": "/usr/lib/libncursesw.so.6",
+    "target": "libncursesw.so.6.4"
+  },
+  {
+    "path": "/usr/lib/libnftables.so",
+    "target": "libnftables.so.1.1.0"
+  },
+  {
+    "path": "/usr/lib/libnftables.so.1",
+    "target": "libnftables.so.1.1.0"
+  },
+  {
+    "path": "/usr/lib/libnftnl.so.11",
+    "target": "libnftnl.so.11.6.0"
+  },
+  {
+    "path": "/usr/lib/libnghttp2.so.14",
+    "target": "libnghttp2.so.14.28.2"
+  },
+  {
+    "path": "/usr/lib/libnl-3.so.200",
+    "target": "libnl-3.so.200.26.0"
+  },
+  {
+    "path": "/usr/lib/libnl-genl-3.so.200",
+    "target": "libnl-genl-3.so.200.26.0"
+  },
+  {
+    "path": "/usr/lib/libpanel.so.6",
+    "target": "libpanelw.so.6"
+  },
+  {
+    "path": "/usr/lib/libpanel.so.6.4",
+    "target": "libpanelw.so.6.4"
+  },
+  {
+    "path": "/usr/lib/libpanelw.so.6",
+    "target": "libpanelw.so.6.4"
+  },
+  {
+    "path": "/usr/lib/libsqlite3.so",
+    "target": "libsqlite3.so.3.53.1"
+  },
+  {
+    "path": "/usr/lib/libsqlite3.so.0",
+    "target": "libsqlite3.so.3.53.1"
+  },
+  {
+    "path": "/usr/lib/libxtables.so.12",
+    "target": "libxtables.so.12.7.0"
+  },
+  {
+    "path": "/usr/lib/libz.so",
+    "target": "libz.so.1"
+  },
+  {
+    "path": "/usr/lib/libz.so.1",
+    "target": "libz.so.1.3.1"
+  },
+  {
+    "path": "/usr/sbin/brctl",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/sbin/chroot",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/sbin/crond",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/sbin/fw_setenv",
+    "target": "fw_printenv"
+  },
+  {
+    "path": "/usr/sbin/hostapd",
+    "target": "wpad"
+  },
+  {
+    "path": "/usr/sbin/iptables",
+    "target": "/usr/sbin/xtables-nft-multi"
+  },
+  {
+    "path": "/usr/sbin/iptables-nft",
+    "target": "xtables-nft-multi"
+  },
+  {
+    "path": "/usr/sbin/iptables-nft-restore",
+    "target": "xtables-nft-multi"
+  },
+  {
+    "path": "/usr/sbin/iptables-nft-save",
+    "target": "xtables-nft-multi"
+  },
+  {
+    "path": "/usr/sbin/iptables-restore",
+    "target": "/usr/sbin/xtables-nft-multi"
+  },
+  {
+    "path": "/usr/sbin/iptables-restore-translate",
+    "target": "xtables-nft-multi"
+  },
+  {
+    "path": "/usr/sbin/iptables-save",
+    "target": "/usr/sbin/xtables-nft-multi"
+  },
+  {
+    "path": "/usr/sbin/iptables-translate",
+    "target": "xtables-nft-multi"
+  },
+  {
+    "path": "/usr/sbin/ntpd",
+    "target": "../../bin/busybox"
+  },
+  {
+    "path": "/usr/sbin/wpa_supplicant",
+    "target": "wpad"
+  },
+  {
+    "path": "/var",
+    "target": "tmp"
+  },
+  {
+    "path": "/www/cgi-bin/cgi-backup",
+    "target": "../../usr/libexec/cgi-io"
+  },
+  {
+    "path": "/www/cgi-bin/cgi-download",
+    "target": "../../usr/libexec/cgi-io"
+  },
+  {
+    "path": "/www/cgi-bin/cgi-exec",
+    "target": "../../usr/libexec/cgi-io"
+  },
+  {
+    "path": "/www/cgi-bin/cgi-upload",
+    "target": "../../usr/libexec/cgi-io"
+  }
+]

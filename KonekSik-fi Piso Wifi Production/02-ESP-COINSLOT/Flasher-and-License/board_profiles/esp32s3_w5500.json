@@ -1,0 +1,23 @@
+{
+  "id": "esp32s3_w5500",
+  "name": "ESP32-S3 + W5500 Ethernet",
+  "chip": "esp32s3",
+  "network": "w5500",
+  "wireless": false,
+  "esptool_chip": "esp32s3",
+  "flash_mode": "qio",
+  "flash_freq": "80m",
+  "flash_size": "8MB",
+  "default_firmware": "firmware/esp32s3_w5500.bin",
+  "notes": "ESP32-S3 + W5500 on SPI. Prefer input-capable GPIOs for coin lines.",
+  "pins": {
+    "coin_primary": { "gpio": 4, "label": "GPIO4", "role": "Coin pulse (primary)" },
+    "coin_backup": { "gpio": 5, "label": "GPIO5", "role": "Coin pulse (backup)" },
+    "relay": { "gpio": 6, "label": "GPIO6", "role": "Relay" },
+    "led": { "gpio": 2, "label": "GPIO2", "role": "Status LED" },
+    "w5500_cs": { "gpio": 10, "label": "GPIO10", "role": "W5500 CS" },
+    "w5500_sclk": { "gpio": 12, "label": "GPIO12", "role": "W5500 SCLK" },
+    "w5500_miso": { "gpio": 13, "label": "GPIO13", "role": "W5500 MISO" },
+    "w5500_mosi": { "gpio": 11, "label": "GPIO11", "role": "W5500 MOSI" }
+  }
+}

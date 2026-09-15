@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- devtools guard (light) — operator bypass: append ?ddtk=fastfi-admin -->
+    <script>window.FASTFI_DDT_MODE='portal';</script>
+    <script src="./lib/disable-devtool.min.js?v=0.3.9"></script>
+    <script src="./lib/devtool-guard.js?v=1"></script>
+    <title>KonekSik-Fi License Required</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding-top: 80px;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .box {
+            background: rgba(255,255,255,0.1);
+            padding: 40px;
+            border-radius: 15px;
+            display: inline-block;
+            backdrop-filter: blur(10px);
+        }
+        h1 { color: #ff6b6b; margin-bottom: 20px; }
+        p { margin: 10px 0; font-size: 16px; }
+        .btn {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 12px 30px;
+            background: #38bdf8;
+            color: #0f172a;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .btn:hover { background: #0ea5e9; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>License Required</h1>
+        <p>This KonekSik-Fi device has no valid license.</p>
+        <p>Please activate to continue.</p>
+        <input id="licenseKey" type="text" placeholder="Enter license key" style="display:block; width:280px; padding:12px; border-radius:8px; border:none; margin:10px auto; font-size:15px;">
+        <button id="activateBtn" class="btn" onclick="activateLicense()">Activate License</button>
+        <p id="licenseResult" style="font-size:13px; margin-top:12px; color:#ffd166;"></p>
+        <p id="autoStatus" style="font-size:12px; margin-top:16px; color:#94a3b8;"></p>
+    </div>
+<script>
+function activateLicense() {
+    var key = (document.getElementById('licenseKey').value || '').trim();
+    var res = document.getElementById('licenseResult');
+    if (!key) { res.innerText = "Please enter a license key."; return; }
+    res.innerText = "Activating...";
+    fetch('/cgi-bin/api?action=license_activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'license_key=' + encodeURIComponent(key)
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+        if (d.status === 'ok' || d.status === 'active') {
+            res.innerText = "License activated! Redirecting...";
+            setTimeout(function(){ window.location.href = '/index.html'; }, 800);
+        } else {
+            res.innerText = d.message || 'Activation failed.';
+        }
+    })
+    .catch(function(){ res.innerText = 'Activation request failed.'; });
+}
+// Self-healing: if license becomes active, redirect back to portal automatically
+(function autoCheck() {
+    fetch('/cgi-bin/api?action=device_status')
+    .then(r => r.json())
+    .then(d => {
+        if (d.status !== "inactive") {
+            document.getElementById('autoStatus').innerText = "License detected! Redirecting...";
+            setTimeout(() => { window.location.href = "/index.html"; }, 800);
+        } else {
+            document.getElementById('autoStatus').innerText = "Waiting for activation...";
+            setTimeout(autoCheck, 3000);
+        }
+    })
+    .catch(() => { setTimeout(autoCheck, 5000); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+Source: FASTFI-RUIJIE-EW1200G-PRO-V2.5.1.bin
+Total size: 11469919 bytes
+uImage name: MIPS OpenWrt Linux-6.6.141
+Kernel size: 3193789 bytes
+Kernel load/entry: 0x80001000
+Compression: 0 (0=none)
+SquashFS offset: 3193853
+SquashFS size: 8276066 bytes
+
+Extraction complete:
+- kernel.uImage / kernel.bin : Linux kernel (MIPS OpenWrt 6.6.141)
+- rootfs.squashfs : raw SquashFS image (XZ)
+- rootfs/ : fully extracted OpenWrt root filesystem
+- symlinks.json : symlink map (Windows may store some as text markers)
+- extract-errors.json : extraction errors (should be empty)
+
+This is a custom FastFi OpenWrt 24.10.7 image for RG-EW1200G Pro.

@@ -1,0 +1,1 @@
+OK - flasher+license packed, firmware bins linked: 0

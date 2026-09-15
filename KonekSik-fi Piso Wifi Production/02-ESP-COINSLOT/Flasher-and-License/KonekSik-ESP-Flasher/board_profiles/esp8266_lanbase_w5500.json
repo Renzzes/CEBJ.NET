@@ -1,0 +1,23 @@
+{
+  "id": "esp8266_lanbase_w5500",
+  "name": "ESP8266 + W5500 (LANBASE)",
+  "chip": "esp8266",
+  "network": "w5500",
+  "wireless": false,
+  "esptool_chip": "esp8266",
+  "flash_mode": "dout",
+  "flash_freq": "40m",
+  "flash_size": "4MB",
+  "default_firmware": "firmware/esp8266_lanbase_w5500.bin",
+  "notes": "Matches FastFi lanbase wiring. W5500 uses hardware SPI. GPIO0 is W5500 CS (boot strap — needs idle HIGH).",
+  "pins": {
+    "coin_primary": { "gpio": 4, "label": "D2", "role": "Coin pulse (primary)" },
+    "coin_backup": { "gpio": 5, "label": "D1", "role": "Coin pulse (backup)" },
+    "relay": { "gpio": 15, "label": "D8", "role": "Relay (active HIGH default)" },
+    "led": { "gpio": 2, "label": "D4", "role": "Status LED (active LOW)" },
+    "w5500_cs": { "gpio": 0, "label": "D3", "role": "W5500 CS" },
+    "w5500_sclk": { "gpio": 14, "label": "D5", "role": "W5500 SCLK (HW SPI)" },
+    "w5500_miso": { "gpio": 12, "label": "D6", "role": "W5500 MISO (HW SPI)" },
+    "w5500_mosi": { "gpio": 13, "label": "D7", "role": "W5500 MOSI (HW SPI)" }
+  }
+}

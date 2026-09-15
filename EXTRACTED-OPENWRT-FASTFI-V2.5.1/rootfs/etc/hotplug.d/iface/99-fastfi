@@ -1,0 +1,55 @@
+#!/bin/sh
+# FastFi V6 Interface Hotplug Trigger
+# Description: Restores active sessions after WAN reconnects.
+# Strategy: Wait for the OLD nodogsplash to die, then wait for the
+#           NEW instance to fully initialize its firewall chains.
+
+if [ "$ACTION" = "ifup" ] && [ "$INTERFACE" = "wan" ]; then
+    logger -t fastfi "WAN interface is up (hotplug detected). Starting recovery sequence..."
+    (
+        # 1. Record the OLD nodogsplash PID (it's about to be killed by procd)
+        OLD_PID=$(pidof nodogsplash)
+        logger -t fastfi "Old nodogsplash PID: ${OLD_PID:-none}"
+
+        # 2. Wait for the old process to fully exit (max 10 seconds)
+        if [ -n "$OLD_PID" ]; then
+            for i in $(seq 1 10); do
+                if ! kill -0 "$OLD_PID" 2>/dev/null; then
+                    logger -t fastfi "Old nodogsplash (PID $OLD_PID) exited after ${i}s"
+                    break
+                fi
+                sleep 1
+            done
+        fi
+
+        # 3. Wait for a NEW nodogsplash PID to appear (max 10 seconds)
+        NEW_PID=""
+        for i in $(seq 1 10); do
+            NEW_PID=$(pidof nodogsplash)
+            if [ -n "$NEW_PID" ] && [ "$NEW_PID" != "$OLD_PID" ]; then
+                logger -t fastfi "New nodogsplash PID: $NEW_PID (detected after ${i}s)"
+                break
+            fi
+            NEW_PID=""
+            sleep 1
+        done
+
+        if [ -z "$NEW_PID" ]; then
+            logger -t fastfi "ERROR: New nodogsplash did not start within 10s. Aborting recovery."
+            exit 1
+        fi
+
+        # 4. Wait for the NEW instance to finish initializing firewall rules (ndsOUT chain)
+        #    The new process creates the chain AFTER logging "Initializing firewall rules"
+        for i in $(seq 1 15); do
+            if iptables -t mangle -L ndsOUT >/dev/null 2>&1; then
+                # Extra 2-second buffer for nodogsplash to finish adding all internal rules
+                sleep 2
+                logger -t fastfi "New nodogsplash chains ready! Restoring sessions now."
+                /usr/bin/env lua /usr/libexec/fastfi/core/sync-sessions.lua >/dev/null 2>&1
+                break
+            fi
+            sleep 1
+        done
+    ) &
+fi

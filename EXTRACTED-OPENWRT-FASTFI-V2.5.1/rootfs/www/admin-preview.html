@@ -1,0 +1,2453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CEBJ.NET Admin</title>
+<meta name="description" content="CEBJ.NET WiFi Vendo administration dashboard — manage sessions, rates, vouchers, and network settings.">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- devtools guard (anti-inspection) — operator bypass: append ?ddtk=fastfi-admin -->
+<!-- preview: anti-devtools disabled -->
+<link rel="shortcut icon" href="./image/CEBJ_ICON.png" type="image/png">
+<link rel="icon" href="./image/CEBJ_ICON.png" type="image/png">
+<link rel="stylesheet" href="./css/bootstrap.min.css?v=dev-1789510318974">
+<link rel="stylesheet" href="./css/admin.css?v=dev-1789510318974">
+<link rel="stylesheet" href="./css/portal-live-preview.css?v=dev-1789510318974">
+<script src="./icons.js?v=dev-1789510318974"></script>
+<script src="./chart.min.js?v=dev-1789510318974"></script>
+<script src="./lib/qrcode.js?v=dev-1789510318974"></script>
+</head>
+
+<body>
+
+<!-- Password Recovery: licence-key tail -->
+<div id="recoveryModal" class="modal-overlay" style="z-index:9999;">
+    <div class="modal-card" style="max-width:420px;">
+        <h3 style="margin-bottom:8px;">Reset Admin Password</h3>
+        <p class="text-muted" style="font-size:13px; margin-bottom:14px;">
+            Enter the <strong>last two groups</strong> of this router's licence key.
+        </p>
+        <input type="text" class="form-control mb-2" id="licenseTail"
+               placeholder="XXXX-XXXX" autocomplete="off" spellcheck="false"
+               style="text-align:center; letter-spacing:2px; text-transform:uppercase;">
+        <div class="form-text mb-3" style="font-size:12px;">
+            Example: for <code>STD-7K4M-9QP2-A83B-6RC4</code> enter <code>A83B-6RC4</code>.
+            The password resets to <code>admin123</code> and you must set a new one straight away.
+        </div>
+        <div id="recoveryMsg" class="mb-2" style="font-size:13px;"></div>
+        <div class="d-flex gap-2 justify-content-end">
+            <button onclick="closeModal()" class="btn btn-outline-secondary">Cancel</button>
+            <button id="btnRecover" onclick="submitRecovery()" class="btn btn-primary">Reset Password</button>
+        </div>
+    </div>
+</div>
+
+<!-- Forced password change after a recovery reset -->
+<div id="forceChangeModal" class="modal-overlay" style="z-index:10000;">
+    <div class="modal-card" style="max-width:420px;">
+        <h3 style="margin-bottom:8px;">Set a New Password</h3>
+        <p class="text-muted" style="font-size:13px; margin-bottom:14px;">
+            This router is still using the default password after a recovery reset.
+            Choose a new one before continuing.
+        </p>
+        <input type="password" class="form-control mb-2" id="forceNewPass" placeholder="New password" autocomplete="new-password">
+        <input type="password" class="form-control mb-2" id="forceNewPass2" placeholder="Confirm new password" autocomplete="new-password">
+        <div id="forceChangeMsg" class="mb-2" style="font-size:13px;"></div>
+        <div class="d-flex justify-content-end">
+            <button id="btnForceChange" onclick="submitForcedChange()" class="btn btn-primary">Save Password</button>
+        </div>
+    </div>
+</div>
+
+<!-- Sidebar Overlay -->
+<div class="sidebar-overlay bg-dark opacity-50 position-fixed w-100 h-100 top-0 start-0 d-none z-2" id="sidebarOverlay" onclick="toggleSidebar()" style="transition: opacity 0.3s; z-index: 1040;"></div>
+
+<div id="loginSection" class="vh-100 w-100 position-fixed top-0 start-0 z-3">
+  <div class="login-bg-grid" aria-hidden="true"></div>
+  <div class="fail-flash" id="fail-flash" aria-hidden="true"></div>
+
+  <div class="login-wrap" id="login-wrap">
+    <img class="login-logo brand-logo--glow" id="ffLoginLogo" src="./image/CEBJ.png" alt="CEBJ.NET" onerror="this.style.display='none';var t=document.getElementById('ffLoginBrandText');if(t)t.style.display='block'">
+    <div id="ffLoginBrandText" class="login-brand-text" style="display:none;" aria-hidden="true">CEBJ.NET</div>
+    <div class="login-glow">
+      <form class="login-card" id="login-form" autocomplete="off" onsubmit="event.preventDefault();login();">
+        <h1>Admin Console</h1>
+        <p class="sub">Sign in to manage your Piso WiFi network.</p>
+
+        <div class="field" id="loginUserField">
+          <label for="adminUser">Username</label>
+          <input id="adminUser" name="username" type="text" required autofocus placeholder="admin" value="admin" autocomplete="username">
+        </div>
+
+        <div class="field" id="loginPassField">
+          <label for="adminPass">Password</label>
+          <div class="pw-wrap">
+            <input id="adminPass" name="password" type="password" required placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter'){event.preventDefault();login();}">
+            <button type="button" class="pw-toggle" id="pw-toggle" onclick="togglePass()" title="Show/Hide Password" aria-label="Show password">
+              <i data-icon="eye" data-size="16"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="error-msg" id="login-error"></div>
+        <button class="btn-login" id="login-btn" type="submit">Sign in</button>
+        <p class="login-foot">
+          <a href="#" class="login-forgot" onclick="startRecovery(); return false;">Forgot Password?</a>
+          <span class="login-foot-sep">·</span>
+          CEBJ.NET Admin
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <div class="success-overlay" id="success-overlay">
+    <div class="success-ring">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12.5l5 5L20 7"/>
+      </svg>
+    </div>
+    <h2>Welcome back</h2>
+    <p>Opening the Admin Console…</p>
+  </div>
+</div> <!-- Close loginSection -->
+
+<div id="adminPanel" class="app-shell d-flex vh-100 hidden w-100">
+
+<div class="sidebar d-flex flex-column flex-shrink-0" id="adminSidebar">
+  <div class="brand">
+    <div class="brand-logo-wrap has-image" id="ffBrandLogoWrap">
+      <img class="brand-logo brand-logo--glow" id="ffSidebarLogo" src="./image/CEBJ.png" alt="CEBJ.NET" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='grid')">
+      <div class="brand-mark" id="ffBrandMark" style="display:none;">C</div>
+    </div>
+    <div class="brand-copy">
+      <span>Admin Console</span>
+    </div>
+  </div>
+
+  <nav class="nav" id="sidebarNav">
+    <div class="nav-label">Overview</div>
+    <button type="button" class="nav-item" data-nav="dashboard" onclick="showDashboard();closeSidebarMobile()"><i data-icon="layout-dashboard" data-size="16"></i><span>Dashboard</span></button>
+    <button type="button" class="nav-item" data-nav="sales" onclick="showSales();closeSidebarMobile()"><i data-icon="trending-up" data-size="16"></i><span>Sales</span></button>
+
+    <div class="nav-label">Management</div>
+    <button type="button" class="nav-item" data-nav="rates" onclick="showRates();closeSidebarMobile()"><i data-icon="coins" data-size="16"></i><span>Coin Rates</span></button>
+    <button type="button" class="nav-item" data-nav="plans" onclick="showPlans();closeSidebarMobile()"><i data-icon="file-text" data-size="16"></i><span>Plans</span></button>
+    <button type="button" class="nav-item" data-nav="bandwidth" onclick="showBandwidth();closeSidebarMobile()"><i data-icon="activity" data-size="16"></i><span>Bandwidth</span></button>
+    <button type="button" class="nav-item" data-nav="plan-clients" onclick="showPlanClients();closeSidebarMobile()"><i data-icon="users" data-size="16"></i><span>Plan Clients</span></button>
+    <button type="button" class="nav-item" data-nav="sessions" onclick="showSessions();closeSidebarMobile()"><i data-icon="users" data-size="16"></i><span>Sessions</span></button>
+    <button type="button" class="nav-item" data-nav="devices" onclick="showDevices();closeSidebarMobile()"><i data-icon="smartphone" data-size="16"></i><span>Devices</span></button>
+    <button type="button" class="nav-item" data-nav="waiting" onclick="showWaitingQueue();closeSidebarMobile()"><i data-icon="clock" data-size="16"></i><span>Waiting Queue</span></button>
+    <button type="button" class="nav-item" data-nav="vouchers" onclick="showVouchers();closeSidebarMobile()"><i data-icon="ticket" data-size="16"></i><span>Vouchers</span></button>
+    <button type="button" class="nav-item" data-nav="gcash" onclick="showGcash();closeSidebarMobile()"><i data-icon="smartphone" data-size="16"></i><span>GCash</span></button>
+    <button type="button" class="nav-item" data-nav="captive-portal" onclick="showCaptivePortal();closeSidebarMobile()"><i data-icon="image" data-size="16"></i><span>Captive Portal</span></button>
+
+    <div class="nav-label">Network</div>
+    <button type="button" class="nav-item" data-nav="network" onclick="showNetwork();closeSidebarMobile()"><i data-icon="globe" data-size="16"></i><span>Network</span></button>
+    <button type="button" class="nav-item" data-nav="access-points" onclick="showAccessPoints();closeSidebarMobile()"><i data-icon="signal" data-size="16"></i><span>Access Points</span></button>
+    <button type="button" class="nav-item" data-nav="wifi" onclick="showWiFi();closeSidebarMobile()"><i data-icon="wifi" data-size="16"></i><span>WiFi SSID</span></button>
+    <button type="button" class="nav-item" data-nav="radio" onclick="showRadioStatus();closeSidebarMobile()"><i data-icon="signal" data-size="16"></i><span>Radio Status</span></button>
+
+    <div class="nav-label">System</div>
+    <button type="button" class="nav-item" data-nav="settings" onclick="showSettings();closeSidebarMobile()"><i data-icon="settings" data-size="16"></i><span>Settings</span></button>
+    <button type="button" class="nav-item" data-nav="operators" onclick="showOperators();closeSidebarMobile()"><i data-icon="shield" data-size="16"></i><span>Operators</span></button>
+    <button type="button" class="nav-item" data-nav="reports" onclick="showReports();closeSidebarMobile()"><i data-icon="bar-chart-2" data-size="16"></i><span>Reports</span></button>
+    <button type="button" class="nav-item" data-nav="remote-access" onclick="showRemoteAccess();closeSidebarMobile()"><i data-icon="cloud" data-size="16"></i><span>Remote Access</span></button>
+    <button type="button" class="nav-item" data-nav="sub-vendo" onclick="showESPSlots();closeSidebarMobile()"><i data-icon="cpu" data-size="16"></i><span>Sub Vendo</span></button>
+    <button type="button" class="nav-item" data-nav="update" onclick="showUpdate();closeSidebarMobile()"><i data-icon="refresh-cw" data-size="16"></i><span>OTA Update</span></button>
+  </nav>
+
+  <div class="sidebar-foot">
+    <button type="button" class="nav-item" onclick="confirmReboot()"><i data-icon="power" data-size="16"></i><span>Reboot</span></button>
+    <button type="button" class="nav-item danger" onclick="logout()"><i data-icon="log-out" data-size="16"></i><span>Logout</span></button>
+  </div>
+</div>
+
+<div class="main-column d-flex flex-column flex-grow-1 overflow-hidden">
+<header class="app-header d-flex w-100 justify-content-between align-items-center px-3 py-2 border-bottom flex-shrink-0">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <button class="btn btn-light me-1 d-md-none" onclick="toggleSidebar()"><i data-icon="menu" data-size="22"></i></button>
+        <div>
+            <div class="page-title" id="appPageTitle">Dashboard</div>
+            <div class="page-crumb text-muted" id="appPageCrumb">Overview of your CEBJ.NET system</div>
+        </div>
+    </div>
+    <button id="themeToggle" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2" onclick="toggleTheme()" title="Theme Selection">
+        <i data-icon="monitor" data-size="16"></i> <span id="themeToggleText" style="font-size: 11px; text-transform: uppercase;">Auto</span>
+    </button>
+</header>
+
+<div class="flex-grow-1 p-4 overflow-auto">
+
+<!-- DASHBOARD -->
+<div id="dashboardSection">
+
+<div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom: 12px;">
+    <h3 class="section-title">System & Clients</h3>
+    <div class="d-flex gap-2">
+        <label class="form-check form-switch d-flex align-items-center gap-2 mb-0 ff-toggle" style="cursor:pointer;">
+            <input class="form-check-input" type="checkbox" id="autoRefreshToggle" onchange="toggleAutoRefresh()" checked>
+            <span class="form-check-label" style="font-size:13px;margin:0;">Auto-refresh</span>
+        </label>
+        <button onclick="loadSystemStatus()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" id="refreshBtn"><i data-icon="refresh-cw" data-size="12"></i> Refresh</button>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="zap" data-size="18"></i> Quick Actions</h5>
+</div>
+<div class="card-body">
+<div class="d-flex gap-2 flex-wrap">
+    <button id="btnSystemUpdate" onclick="showUpdate()" class="btn btn-info d-flex align-items-center gap-2 text-white" style="border: 2px solid white !important;"><i data-icon="refresh-cw" data-size="16"></i> System Update</button>
+    <button onclick="showSales()" class="btn btn-primary d-flex align-items-center gap-2"><i data-icon="trending-up" data-size="16"></i> View Sales</button>
+    <button onclick="showSessions()" class="btn btn-primary d-flex align-items-center gap-2"><i data-icon="users" data-size="16"></i> View Sessions</button>
+    <button onclick="showAccessPoints()" class="btn btn-secondary d-flex align-items-center gap-2"><i data-icon="signal" data-size="16"></i> Access Points</button>
+    <button onclick="showVouchers()" class="btn btn-success d-flex align-items-center gap-2"><i data-icon="ticket" data-size="16"></i> Generate Vouchers</button>
+    <button onclick="showESPSlots()" class="btn btn-info d-flex align-items-center gap-2 text-white"><i data-icon="cpu" data-size="16"></i> Sub Vendo</button>
+    <button onclick="showNetwork()" class="btn btn-warning d-flex align-items-center gap-2"><i data-icon="globe" data-size="16"></i> Network Config</button>
+    <button onclick="confirmReboot()" class="btn btn-danger d-flex align-items-center gap-2"><i data-icon="power" data-size="16"></i> Reboot Router</button>
+</div>
+</div>
+</div>
+
+<div class="row g-3 mb-4">
+    <!-- Sales Card -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(16, 185, 129, 0.1);color:#10b981;">
+                    <span style="font-size: 22px; font-weight: bold; line-height: 1;">₱</span>
+                </div>
+                <div style="min-width:0; overflow:hidden; width:100%;">
+                    <div class="d-flex justify-content-between align-items-end mb-1">
+                        <div>
+                            <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:10px;letter-spacing:0.5px;">Sales Today</div>
+                            <h4 class="mb-0 fw-bold text-truncate" style="color:#10b981;" id="sysSalesToday">₱0</h4>
+                        </div>
+                        <div class="text-end">
+                            <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:10px;letter-spacing:0.5px;">This Month</div>
+                            <h5 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary);" id="sysSalesMonth">₱0</h5>
+                        </div>
+                    </div>
+                    <div class="text-muted" style="font-size:11px;">Week: <span id="sysSalesWeek">₱0</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Connected Card -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(34, 197, 94, 0.1);color:#22c55e;">
+                    <i data-icon="wifi" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Connected</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="connectedCount">0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Sessions Card -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(99, 102, 241, 0.1);color:#6366f1;">
+                    <i data-icon="users" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Active Sessions</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="totalClients">0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Uptime Card -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(245, 158, 11, 0.1);color:#f59e0b;">
+                    <i data-icon="clock" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Uptime</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="sysUptime">-</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Per AP + ESP32 -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="signal" data-size="18"></i> Per AP + ESP32</h5>
+    <span class="text-muted small">KPIs are the sum of these rows. Bind ESP units under Access Points.</span>
+</div>
+<div class="table-responsive">
+<table class="table table-hover table-sm align-middle mb-0">
+<thead class="table-dark">
+<tr><th>Access Point</th><th>ESP32</th><th>Connected</th><th>Waiting</th><th>Sessions</th><th>Today's sales</th></tr>
+</thead>
+<tbody id="ffPerApEspTable">
+<tr><td colspan="6" class="text-muted text-center py-3">Loading…</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-header card-header-custom"><h5 class="card-header-title mb-0">Network Status</h5></div>
+      <div class="card-body">
+        <div id="ffNetStatusList" class="ff-status-list mb-3"></div>
+        <div class="row g-2" id="ffNetMetrics">
+          <div class="col-6"><div class="ff-metric"><dt>Latency</dt><dd id="ffNetLatency">—</dd></div></div>
+          <div class="col-6"><div class="ff-metric"><dt>Packet Loss</dt><dd id="ffNetLoss">—</dd></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100 ff-ruijie-card" id="ffRuijieCard">
+      <div class="ff-rj-head">
+        <div class="ff-rj-title">
+          <span class="ff-rj-mark live" id="ffRjMark"><i data-icon="wifi" data-size="16"></i></span>
+          <h5 class="mb-0">Ruijie Router</h5>
+        </div>
+        <span class="badge bg-success" id="ffRjBadge">connected</span>
+      </div>
+      <div class="ff-rj-facts" id="ffRjFacts"></div>
+      <div class="ff-sto" id="ffRjStorage"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title mb-0">Recent Sessions</h5>
+    <button onclick="showSessions()" class="btn btn-outline-secondary btn-sm">View All</button>
+</div>
+<div class="table-responsive">
+<table class="table table-sm mb-0">
+<thead><tr><th>MAC</th><th>Remaining</th><th>Status</th><th>Sub Vendo</th></tr></thead>
+<tbody id="ffRecentSessions"><tr><td colspan="4" class="text-muted text-center">Loading…</td></tr></tbody>
+</table>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title mb-0">Connected Users</h5>
+</div>
+<div class="table-responsive">
+<table class="table table-sm mb-0">
+<thead><tr><th>Device</th><th>IP</th><th>MAC</th><th>Remaining</th><th>Status</th><th>Action</th></tr></thead>
+<tbody id="ffConnectedUsersDash"><tr><td colspan="6" class="text-muted text-center">Loading…</td></tr></tbody>
+</table>
+</div>
+</div>
+
+</div>
+<!-- DASHBOARD END -->
+
+<!-- RATES -->
+<div id="ratesSection" class="hidden">
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="coins" data-size="18"></i> Coin Rates</h5>
+    <div class="card-header-actions">
+        <button class="btn btn-danger btn-sm" onclick="deleteAllRates()"><i data-icon="trash-2" data-size="14"></i> Delete All</button>
+        <button class="btn btn-primary btn-sm" onclick="addRateRow()"><i data-icon="plus" data-size="14"></i> Add</button>
+        <button class="btn btn-primary btn-sm" onclick="saveRates()"><i data-icon="save" data-size="14"></i> Save Rates</button>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+<th>Price (₱)</th>
+<th>Time (Hrs)</th>
+<th>Time (Min)</th>
+<th>DL Limit (Mbps)</th>
+<th>UL Limit (Mbps)</th>
+<th>Pause Limit</th>
+<th>Validity (Hrs)</th>
+<th>Data (MB)</th>
+<th style="width: 60px;">Action</th>
+</tr>
+</thead>
+<tbody id="ratesTable"></tbody>
+</table></div>
+</div>
+</div>
+
+<!-- REMOVED TO BALANCE -->
+<!-- SESSIONS -->
+<div id="sessionsSection" class="hidden">
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title"><i data-icon="users" data-size="18"></i> Connected Users</h5>
+    <div class="card-header-actions">
+        <button onclick="loadClients()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+<th>Hostname</th>
+<th>IP Address</th>
+<th>MAC Address</th>
+<th>Data (DL/UL)</th>
+<th>Speed Limit</th>
+<th>Pause Limit</th>
+<th>Time Remaining</th>
+<th>Expiration</th>
+<th>Status</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="clientTable"></tbody>
+</table></div>
+</div>
+
+<!-- Unauthenticated Clients (WiFi Discovery) -->
+<div class="card shadow-sm mb-4 border-0" style="margin-top:16px;">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title"><i data-icon="wifi" data-size="18"></i> Unauthenticated Clients</h5>
+    <div class="card-header-actions">
+        <span class="text-muted" style="font-size:12px;">Devices connected to WiFi but without active time</span>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+<th>Hostname</th>
+<th>IP Address</th>
+<th>MAC Address</th>
+<th>Status</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="unauthTable"></tbody>
+</table></div>
+</div> <!-- End unauthTable container -->
+
+<!-- Session History -->
+<div class="card shadow-sm mb-4 border-0" style="margin-top:16px;">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title"><i data-icon="clock" data-size="18"></i> Session History</h5>
+    <div class="card-header-actions">
+        <button onclick="loadSessionHistory()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"><i data-icon="refresh-cw" data-size="12"></i> Refresh</button>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+<th>Time</th>
+<th>Device</th>
+<th>MAC Address</th>
+<th>Event</th>
+<th>Remaining</th>
+<th>Triggered By</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody id="sessionHistoryTable"></tbody>
+</table></div>
+</div>
+
+
+<!-- Blocked Clients -->
+<div class="card shadow-sm mb-4 border-0" style="margin-top:16px;">
+<div class="card-header card-header-custom">
+    <h5 class="card-header-title"><i data-icon="slash" data-size="18"></i> Blocked Devices</h5>
+    <div class="card-header-actions">
+        <span class="text-muted" style="font-size:12px;">Devices completely banned from network access</span>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark"><tr><th>Hostname</th><th>IP Address</th><th>MAC Address</th><th>Data (DL/UL)</th><th>Status</th><th style="width:120px;">Actions</th></tr></thead>
+<tbody id="blocklistTable"></tbody>
+</table></div>
+</div>
+
+</div> <!-- End sessionsSection -->
+
+<!-- MODAL PANELS -->
+<div id="editPanelOverlay" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3>Edit Client</h3>
+            <button class="modal-close" onclick="cancelEdit()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>
+        <p class="text-muted" style="font-size:13px; margin-top:-10px; margin-bottom:15px;">MAC: <strong id="editMac" class="text-dark" style="font-family:monospace;"></strong></p>
+
+        <div style="display:flex; gap:12px; margin-bottom:12px;">
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold">Days</label>
+                <input type="number" class="form-control" id="editDays" value="0">
+            </div>
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold">Hours</label>
+                <input type="number" class="form-control" id="editHours" value="0">
+            </div>
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold">Minutes</label>
+                <input type="number" class="form-control" id="editMinutes" value="0">
+            </div>
+        </div>
+
+        <div style="display:flex; gap:12px; margin-bottom:12px;">
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold" style="font-size:12px;">Data (MB)</label>
+                <input type="number" class="form-control form-control-sm" id="editDataLimit" value="0" placeholder="Unli=0">
+            </div>
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold" style="font-size:12px;">DL (Mbps)</label>
+                <input type="number" class="form-control form-control-sm" id="editDlLimit" value="0" placeholder="Unli=0">
+            </div>
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold" style="font-size:12px;">UL (Mbps)</label>
+                <input type="number" class="form-control form-control-sm" id="editUlLimit" value="0" placeholder="Unli=0">
+            </div>
+            <div style="flex:1;">
+                <label class="form-label mt-2 fw-semibold" style="font-size:12px;">Pause Lmt</label>
+                <input type="number" class="form-control form-control-sm" id="editPausedLimit" value="0" placeholder="Unli=0">
+            </div>
+        </div>
+
+        <label class="form-label mt-2 fw-semibold">Status</label>
+        <select class="form-select" id="editPaused" style="margin-bottom:20px;">
+            <option value="0">Active</option>
+            <option value="1">Paused</option>
+        </select>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button class="btn btn-outline-secondary" onclick="cancelEdit()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveClient()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<div id="extendPanelOverlay" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3>Add Time</h3>
+            <button class="modal-close" onclick="cancelExtend()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>
+        <p class="text-muted" style="font-size:13px; margin-top:-10px; margin-bottom:15px;">MAC: <strong id="extendMac" class="text-dark" style="font-family:monospace;"></strong></p>
+
+        <label class="form-label mt-2 fw-semibold">Minutes to Add</label>
+        <input type="number" class="form-control" id="extendMinutes" value="30" min="1" max="1440" style="margin-bottom:20px;">
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button class="btn btn-outline-secondary" onclick="cancelExtend()">Cancel</button>
+            <button class="btn btn-primary" onclick="doExtendSession()">Add Time</button>
+        </div>
+    </div>
+</div>
+
+<!-- REMOVED TO BALANCE -->
+<!-- VOUCHERS -->
+<div id="vouchersSection" class="hidden">
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom">
+    <div class="d-flex align-items-center gap-3">
+        <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="ticket" data-size="18"></i> Voucher List</h5>
+        <select class="form-select form-select-sm" id="voucherFilter" onchange="loadVouchers()" style="width:100px; margin:0;">
+            <option value="">All</option>
+            <option value="active">Active</option>
+            <option value="expired">Expired</option>
+            <option value="used">Used</option>
+        </select>
+        <button onclick="loadVouchers()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+    </div>
+    
+    <div class="card-header-actions">
+        <button class="btn btn-danger btn-sm" onclick="document.getElementById('modalDeleteVouchers').classList.add('show')"><i data-icon="trash-2" data-size="14"></i> Delete</button>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('modalGenerateVouchers').classList.add('show');updateVoucherDurationPreview()"><i data-icon="plus" data-size="14"></i> Generate</button>
+        <button onclick="openPrintVouchersModal()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"><i data-icon="printer" data-size="14"></i> Print</button>
+        <button onclick="exportVouchersCSV()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"><i data-icon="download" data-size="14"></i> Export CSV</button>
+    </div>
+</div>
+<div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
+<thead class="table-dark">
+<tr>
+<th>Code</th>
+<th>Duration</th>
+<th>Price</th>
+<th>Batch</th>
+<th>Created</th>
+<th>Expires</th>
+<th>Used By</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody id="voucherTable"></tbody>
+</table></div>
+</div>
+
+<!-- Modal: Generate Vouchers -->
+<div id="modalGenerateVouchers" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3>Generate Vouchers</h3>
+            <button class="modal-close" onclick="document.getElementById('modalGenerateVouchers').classList.remove('show')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div class="row g-3 mb-4 mt-1">
+            <div class="col-6"><label class="form-label fw-semibold">Number</label><input type="number" class="form-control" id="voucherCount" value="10" min="1" max="100"></div>
+            <div class="col-6"><label class="form-label fw-semibold">Price (₱)</label><input type="number" class="form-control" id="voucherPrice" value="10" min="1"></div>
+            <div class="col-12"><label class="form-label fw-semibold">Time on the voucher</label>
+                <div class="row g-2">
+                    <div class="col-4"><input type="number" class="form-control" id="voucherDays" value="0" min="0" max="365" placeholder="Days" oninput="updateVoucherDurationPreview()"><div class="form-text">Days</div></div>
+                    <div class="col-4"><input type="number" class="form-control" id="voucherHours" value="1" min="0" max="8760" placeholder="Hours" oninput="updateVoucherDurationPreview()"><div class="form-text">Hours</div></div>
+                    <div class="col-4"><input type="number" class="form-control" id="voucherMinutes" value="0" min="0" max="525600" placeholder="Minutes" oninput="updateVoucherDurationPreview()"><div class="form-text">Minutes</div></div>
+                </div>
+                <div class="form-text" id="voucherDurationPreview">Total: 1 hour (max 365 days)</div>
+            </div>
+            <div class="col-6"><label class="form-label fw-semibold">Validity (days)</label><input type="number" class="form-control" id="voucherExpiry" value="365" min="0" max="3650"><div class="form-text">How long the code stays usable. 365 = 1 year · 0 = never expires</div></div>
+            <div class="col-6"><label class="form-label fw-semibold">Batch Name</label><input type="text" class="form-control" id="voucherBatch" placeholder="e.g. MARCH-2026"></div>
+        </div>
+        <div class="d-flex justify-content-end gap-2">
+            <button onclick="document.getElementById('modalGenerateVouchers').classList.remove('show')" class="btn btn-outline-secondary">Cancel</button>
+            <button id="btnGenerateVouchers" class="btn btn-primary px-4" onclick="generateVouchers()">Generate</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Print Vouchers -->
+<div id="modalPrintVouchers" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3><i data-icon="printer" data-size="18" class="me-2"></i>Print Vouchers</h3>
+            <button class="modal-close" onclick="document.getElementById('modalPrintVouchers').classList.remove('show')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div class="mt-2 mb-3">
+            <label class="form-label fw-semibold">Batch</label>
+            <select class="form-select" id="printBatchSelect" onchange="updatePrintCount()">
+                <option value="">Loading batches...</option>
+            </select>
+            <div class="form-text">Only unused, unexpired vouchers are printed. Used codes are never reprinted.</div>
+        </div>
+        <div class="p-3 rounded border mb-3" style="border-color:var(--border-subtle) !important;">
+            <div id="printCountSummary" class="fw-semibold">Select a batch</div>
+        </div>
+        <div class="d-flex justify-content-end gap-2">
+            <button onclick="document.getElementById('modalPrintVouchers').classList.remove('show')" class="btn btn-outline-secondary">Cancel</button>
+            <button id="btnPrintVouchers" class="btn btn-primary px-4" onclick="printVouchers()"><i data-icon="printer" data-size="14" class="me-1"></i> Print</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Delete Vouchers -->
+<div id="modalDeleteVouchers" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 class="text-danger"><i data-icon="alert-triangle" data-size="18" class="me-2 text-danger"></i>Delete Vouchers</h3>
+            <button class="modal-close" onclick="document.getElementById('modalDeleteVouchers').classList.remove('show')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        
+        <div class="card bg-dark border-secondary mb-4 mt-2">
+            <div class="card-body py-3">
+                <label class="form-label fw-semibold text-light mb-2">Delete by Batch</label>
+                <div class="d-flex gap-2 align-items-center">
+                    <select class="form-select flex-grow-1" id="deleteBatchSelect" onchange="loadBatchCount()">
+                        <option value="">Select Batch</option>
+                    </select>
+                    <span id="batchCount" class="text-muted small text-end" style="min-width:75px;">0 vouchers</span>
+                    <button onclick="deleteBatch();document.getElementById('modalDeleteVouchers').classList.remove('show')" class="btn btn-outline-danger">Delete</button>
+                </div>
+            </div>
+        </div>
+        
+        <label class="form-label fw-semibold text-light mb-2">Bulk Delete Options</label>
+        <div class="d-grid gap-2">
+            <button onclick="deleteUsed();document.getElementById('modalDeleteVouchers').classList.remove('show')" class="btn btn-outline-warning">Delete Used Vouchers</button>
+            <button onclick="deleteExpired();document.getElementById('modalDeleteVouchers').classList.remove('show')" class="btn btn-outline-warning">Delete Expired Vouchers</button>
+            <button onclick="deleteAllVouchers();document.getElementById('modalDeleteVouchers').classList.remove('show')" class="btn btn-danger mt-2">Delete ALL Vouchers</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Generated Vouchers Copy -->
+<div id="modalGeneratedVouchers" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3>Generated Vouchers</h3>
+            <button class="modal-close" onclick="document.getElementById('modalGeneratedVouchers').classList.remove('show')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <textarea id="voucherOutput" class="form-control font-monospace my-3" rows="10" readonly style="background-color: var(--bs-dark); color: var(--bs-light); border-color: var(--bs-gray-700); resize: none;"></textarea>
+        <div class="d-flex justify-content-end gap-2">
+            <button onclick="document.getElementById('modalGeneratedVouchers').classList.remove('show')" class="btn btn-outline-secondary">Close</button>
+            <button class="btn btn-outline-primary" onclick="exportVouchers('text')"><i data-icon="file-text" data-size="14" class="me-1"></i> Export TXT</button>
+            <button class="btn btn-outline-success" onclick="exportVouchers('csv')"><i data-icon="file-spreadsheet" data-size="14" class="me-1"></i> Export CSV</button>
+            <button class="btn btn-primary" onclick="copyVouchers()"><i data-icon="copy" data-size="14" class="me-1"></i> Copy All</button>
+        </div>
+    </div>
+</div>
+
+</div>
+
+<!-- GCASH E-PAYMENT -->
+<div id="gcashSection" class="hidden">
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+    <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="smartphone" data-size="18"></i> GCash E-Payment</h5>
+    <div class="form-check form-switch ff-toggle mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="gcashEnabled">
+        <label class="form-check-label fw-semibold" for="gcashEnabled">Enable</label>
+    </div>
+</div>
+<div class="card-body">
+<p class="card-subtitle mb-3 text-muted">Owner-owned GCash flow (no payment gateway, no vendor app required). Enable GCash, set your number/QR, generate a companion secret, mint a voucher pool, and export the JSON into <strong>your</strong> Android companion app in <code>gcash-companion/</code>. Customers enter their mobile and pick a package on the portal, pay the exact amount, then your phone app claims the order and SMS-es a WiFi code for them to enter under Wifi Pass.</p>
+
+<div class="row gx-3 gy-3 mb-3">
+    <div class="col-sm-6 col-md-4 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Operator GCash Number</label>
+        <input type="text" class="form-control" id="gcashNumber" placeholder="09XXXXXXXXX">
+        <div class="form-text">The number customers send to.</div>
+    </div>
+    <div class="col-sm-6 col-md-4 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">GCash QR Image</label>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <img id="gcashQrPreview" src="" alt="QR" style="width:56px;height:56px;object-fit:cover;border-radius:8px;display:none;border:1px solid #e2e8f0;">
+            <div class="flex-grow-1">
+                <input type="file" class="form-control form-control-sm" id="gcashQrFile" accept="image/*">
+            </div>
+        </div>
+        <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1" type="button" onclick="uploadGcashQr()"><i data-icon="upload" data-size="13"></i> Upload QR</button>
+        <input type="hidden" id="gcashQr" value="">
+        <div class="form-text">PNG/JPG up to 2MB. Shown on the portal pay screen.</div>
+    </div>
+    <div class="col-sm-6 col-md-4 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Companion App Secret</label>
+        <div class="d-flex align-items-center gap-2">
+            <input type="text" class="form-control" id="gcashSecretDisplay" placeholder="Not generated" readonly>
+            <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1" type="button" onclick="generateGcashSecret()"><i data-icon="key" data-size="14"></i> Generate</button>
+        </div>
+        <div class="form-text">Paste into your KonekSik GCash companion app (Setup → Router secret). Shown only once when generated.</div>
+    </div>
+    <div class="col-sm-6 col-md-4 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Voucher Expiry (days, 0 = none)</label>
+        <input type="number" class="form-control" id="gcashVoucherExpiry" value="0" min="0" max="365">
+        <div class="form-text">Expiry on minted codes.</div>
+    </div>
+    <div class="col-sm-6 col-md-4 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Codes Per Rate (Generate Pool)</label>
+        <div class="input-group input-group-sm">
+            <input type="number" class="form-control" id="gcashCodesPerRate" value="20" min="1" max="200">
+            <button class="btn btn-outline-primary" type="button" onclick="generateGcashPool()">Generate</button>
+        </div>
+        <div class="form-text">Mints N codes for each coin rate.</div>
+    </div>
+</div>
+
+<!-- GCash Free Browsing Window (grant-first; replaces the v2.1.2 walled garden) -->
+<hr class="my-3">
+<div class="mb-2">
+    <div class="form-check form-switch mb-2 d-flex align-items-center gap-2">
+        <input class="form-check-input" type="checkbox" role="switch" id="gcashFreewindowEnabled">
+        <label class="form-check-label fw-semibold" for="gcashFreewindowEnabled">GCash app access</label>
+    </div>
+    <div class="form-text">When ON (default), customers with no active session get a short GCash app access window from the portal so they can open the GCash app and pay.</div>
+</div>
+
+<div class="d-flex gap-2 flex-wrap mb-2">
+    <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveGcashConfig()"><i data-icon="save" data-size="16"></i> Save Changes</button>
+    <button class="btn btn-success d-inline-flex align-items-center gap-2" onclick="exportGcashPool()"><i data-icon="download" data-size="16"></i> Export for Companion App</button>
+    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" onclick="loadGcashConfig()"><i data-icon="refresh-cw" data-size="13"></i> Refresh Pool</button>
+</div>
+<div id="gcashStatus" class="mb-3" style="font-size:13px;"></div>
+
+<!-- Pool inventory -->
+<hr class="my-3">
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="fw-bold mb-0 d-flex align-items-center gap-2"><i data-icon="bar-chart-2" data-size="16"></i> Pool Inventory</h6>
+    <small class="text-muted">Codes minted with batch = "gcash". Available = active codes ready to dispense.</small>
+</div>
+<div class="table-responsive">
+    <table class="table table-hover table-striped align-middle styled-table" style="font-size:13px;">
+        <thead class="table-dark">
+            <tr><th>Rate (₱)</th><th>Minutes</th><th>Total</th><th>Available</th><th>Redeemed</th><th>Status</th></tr>
+        </thead>
+        <tbody id="gcashPoolBody">
+            <tr><td colspan="6" class="text-center text-muted py-3">No pool generated yet.</td></tr>
+        </tbody>
+    </table>
+</div>
+</div>
+</div>
+
+</div>
+
+<!-- SUB VENDO -->
+<div id="espSection" class="hidden">
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h4 class="mb-0" style="color:var(--text-primary);"><i data-icon="cpu" data-size="20" class="me-2"></i>Sub Vendo (ESP32) Management</h4>
+    <div class="d-flex gap-2 flex-wrap">
+        <button type="button" onclick="detectESP32()" class="btn btn-primary d-inline-flex align-items-center gap-2"><i data-icon="radar" data-size="16"></i> Detect ESP32</button>
+        <button type="button" onclick="loadESPDevices();loadLicensePool();" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2"><i data-icon="refresh-cw" data-size="16"></i> Refresh All</button>
+    </div>
+</div>
+
+<!-- Sub Vendo Metrics Row -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface);">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(16, 185, 129, 0.1);color:#10b981;">
+                    <i data-icon="check-circle" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Router License</div>
+                    <h4 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="routerLicenseStatus">Loading...</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface);">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(99, 102, 241, 0.1);color:#6366f1;">
+                    <i data-icon="cpu" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">ESP32 Devices</div>
+                    <h4 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="totalESPSlots">0</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface);">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(16, 185, 129, 0.1);color:#10b981;">
+                    <i data-icon="key" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Licensed Active</div>
+                    <h4 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="availableLicenseCount">0</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface);">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(14, 165, 233, 0.1);color:#0ea5e9;">
+                    <i data-icon="lock" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Licenses On File</div>
+                    <h4 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="usedLicenseCount">0</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="d-none">
+    <span id="freeESPSlots">0</span>
+    <span id="totalLicenseCount">0</span>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header card-header-custom d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="card-header-title mb-0"><i data-icon="radar" data-size="16"></i> Detect / Bind ESP32</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">Automatic when the ESP registers with a KSK license ID. Or enter MAC + License ID manually and click Detect.</p>
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small fw-bold mb-1">ESP32 MAC</label>
+                <input type="text" class="form-control form-control-sm" id="detectEspMac" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold mb-1">License ID (from Flasher)</label>
+                <input type="text" class="form-control form-control-sm" id="detectLicenseId" placeholder="KSK-…" autocomplete="off">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold mb-1">Name (optional)</label>
+                <input type="text" class="form-control form-control-sm" id="detectEspName" placeholder="Counter ESP">
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-primary btn-sm w-100" onclick="detectESP32()">Detect ESP32</button>
+            </div>
+        </div>
+        <p id="detectEspResult" class="small mt-2 mb-0 text-muted"></p>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                <h5 class="card-header-title mb-0"><i data-icon="key" data-size="16"></i> ESP32 Licensed Devices</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <div class="d-flex gap-2 flex-wrap">
+                            <div class="input-group flex-grow-1" style="min-width:220px;">
+                                <span class="input-group-text"><i data-icon="key" data-size="16"></i></span>
+                                <input type="text" class="form-control" id="newLicenseKey" placeholder="Register License ID (KSK-…) — optional if Detect already ran">
+                            </div>
+                            <button type="button" onclick="addLicenseToPool()" class="btn btn-outline-primary d-flex align-items-center gap-2 px-3 text-nowrap"><i data-icon="plus" data-size="16"></i> Register License</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle table-sm mb-0">
+                        <thead>
+                        <tr>
+                            <th>License ID</th>
+                            <th>Status</th>
+                            <th>Live ESP MAC</th>
+                            <th>Grace used</th>
+                            <th>Last bound</th>
+                            <th>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody id="licensePoolBody">
+                        <tr><td colspan="6" class="text-center py-3 text-muted">Loading licensed devices...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title"><i data-icon="cpu" data-size="16"></i> Registered ESP32 Devices</h5></div>
+<div class="card-body">
+<div class="table-responsive"><table class="table table-hover align-middle table-sm mb-0">
+<thead>
+<tr>
+    <th>Slot #</th>
+    <th>Name</th>
+    <th>MAC Address</th>
+    <th>Status</th>
+    <th>License</th>
+    <th>Last Seen</th>
+    <th>Actions</th>
+</tr>
+</thead>
+<tbody id="espTableBody">
+<tr><td colspan="7">Loading...</td></tr>
+</tbody>
+</table></div>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="help-circle" data-size="18"></i> How It Works</h5></div>
+<div class="card-body">
+<ul class="text-muted" style="line-height:1.8;">
+    <li><strong>Offline licenses:</strong> No cloud. Seller uses <em>Flasher-and-License</em> to flash firmware and burn a signed <code>KSK-…</code> license onto the ESP32.</li>
+    <li><strong>Detect / bind:</strong> Power the ESP on this router/AP, then use <strong>Detect ESP32</strong> (auto if the ESP reports its license ID, or enter MAC + License ID). Insert Coin unlocks only when licensed <em>and</em> bound.</li>
+    <li><strong>One live ESP per license:</strong> Each license runs on one MAC at a time. Detecting a new board under the same license drops the old MAC.</li>
+    <li><strong>Grace (max 3):</strong> If an ESP dies, seller gives a <em>replacement flasher bundle</em> with the same sealed license. Flash the new ESP → Detect → continues. After 3 grace uses, buy a new license.</li>
+    <li><strong>New license:</strong> Seller License Generator issues a fresh <code>KSK-…</code> after grace is exhausted.</li>
+    <li><strong>Private WiFi:</strong> ESP may auto-join SSIDs containing <strong>CEBJ</strong> / your private SSID (default password often <code>12345678</code> — change it).</li>
+</ul>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0" style="background: linear-gradient(135deg, #0e7490, #059669); border: none !important;">
+<div class="card-header border-bottom-0 pt-4 pb-0" style="background: transparent !important;"><h5 class="mb-0 text-white">Need a new license or replacement flasher?</h5></div>
+<div class="card-body">
+<p class="text-white mb-1">Contact your CEBJ.NET / KonekSik seller. They will either give you a <strong>replacement flasher bundle</strong> (same license, grace remaining) or a <strong>new KSK license</strong> from the License Generator.</p>
+<p style="color:rgba(255,255,255,0.75); font-size:12px;" class="mb-0">Licenses are offline and bound to this router when Detected — not purchased from FastFi cloud.</p>
+</div>
+</div>
+
+</div>
+<!-- SALES -->
+<div id="salesSection" class="hidden">
+
+<!-- Four Metrics Row -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(99, 102, 241, 0.1);color:#6366f1;">
+                    <i data-icon="activity" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Daily Sales</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="salesDaily">₱0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(34, 197, 94, 0.1);color:#22c55e;">
+                    <i data-icon="calendar" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Weekly Sales</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="salesWeekly">₱0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(245, 158, 11, 0.1);color:#f59e0b;">
+                    <i data-icon="pie-chart" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Monthly Sales</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="salesMonthly">₱0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+            <div class="card-body p-3 d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:48px;height:48px;background:rgba(14, 165, 233, 0.1);color:#0ea5e9;">
+                    <i data-icon="hard-drive" data-size="24"></i>
+                </div>
+                <div style="min-width:0; overflow:hidden;">
+                    <div class="text-uppercase fw-bold text-muted text-truncate" style="font-size:11px;letter-spacing:0.5px;">Total Sales</div>
+                    <h3 class="mb-0 fw-bold text-truncate" style="color:var(--text-primary); margin-top:2px;" id="salesTotal">₱0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 align-items-stretch">
+
+<!-- LEFT COLUMN: Sales Charts -->
+<div class="col-lg-7">
+<div class="card shadow-sm border-0 h-100 sales-analytics-card" style="background:var(--bg-surface);">
+    <div class="card-header card-header-custom border-0 pb-0">
+        <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="bar-chart-2" data-size="18"></i> Sales Trend</h5>
+        <div class="card-header-actions">
+            <select class="form-select form-select-sm sales-filter-select" id="chartFilter" onchange="loadSalesChart()" style="width:130px;">
+                <option value="day">This Day</option>
+                <option value="week" selected>This Week</option>
+                <option value="month">This Month</option>
+            </select>
+            <button onclick="loadAllSales()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" title="Refresh"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+            <button onclick="exportSales()" class="btn btn-primary btn-sm d-flex align-items-center gap-1"><i data-icon="download" data-size="14"></i> CSV</button>
+        </div>
+    </div>
+    <div class="card-body sales-charts-body">
+        <div class="sales-chart-block">
+            <div class="sales-chart-label">Revenue over time</div>
+            <div class="sales-chart-canvas-wrap sales-chart-canvas-wrap--line">
+                <canvas id="salesChartWeekly"></canvas>
+            </div>
+        </div>
+        <div class="sales-chart-block sales-chart-block--secondary">
+            <div class="sales-chart-label">Period breakdown</div>
+            <div class="sales-chart-canvas-wrap sales-chart-canvas-wrap--bar">
+                <canvas id="salesChartBreakdown"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- RIGHT COLUMN: Manage Data -->
+<div class="col-lg-5">
+<div class="card shadow-sm border-0 h-100 sales-manage-card" style="background:var(--bg-surface);">
+    <div class="card-header card-header-custom border-0 pb-0">
+        <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="trash-2" data-size="18"></i> Manage Data</h5>
+    </div>
+    <div class="card-body d-flex flex-column gap-3">
+        
+        <div class="sales-manage-panel">
+            <div class="sales-manage-panel__head">
+                <span class="sales-manage-panel__eyebrow">By date range</span>
+                <span class="sales-manage-panel__hint">Remove records between two dates</span>
+            </div>
+            <div class="sales-date-row">
+                <label class="ff-date-field">
+                    <span class="ff-date-field__icon"><i data-icon="calendar" data-size="14"></i></span>
+                    <input type="date" id="deleteDateStart" class="form-control form-control-sm ff-date-input">
+                </label>
+                <span class="sales-date-sep">to</span>
+                <label class="ff-date-field">
+                    <span class="ff-date-field__icon"><i data-icon="calendar" data-size="14"></i></span>
+                    <input type="date" id="deleteDateEnd" class="form-control form-control-sm ff-date-input">
+                </label>
+            </div>
+            <button class="btn sales-btn-danger-soft btn-sm w-100 d-flex justify-content-center align-items-center gap-2" onclick="deleteRangeSales()"><i data-icon="trash-2" data-size="14"></i> Delete Range</button>
+        </div>
+
+        <div class="sales-manage-panel">
+            <div class="sales-manage-panel__head">
+                <span class="sales-manage-panel__eyebrow">Single day</span>
+            </div>
+            <div class="sales-date-row sales-date-row--single">
+                <label class="ff-date-field" style="flex:1;">
+                    <span class="ff-date-field__icon"><i data-icon="calendar" data-size="14"></i></span>
+                    <input type="date" id="deleteDate" class="form-control form-control-sm ff-date-input">
+                </label>
+                <button class="btn sales-btn-warn-soft btn-sm flex-shrink-0 d-inline-flex align-items-center gap-1" onclick="deleteDaySales()"><i data-icon="trash-2" data-size="14"></i> Delete</button>
+            </div>
+        </div>
+
+        <div class="sales-manage-panel sales-manage-panel--danger">
+            <div class="sales-manage-panel__head">
+                <span class="sales-manage-panel__eyebrow">Mass deletion</span>
+                <span class="sales-manage-panel__hint">These actions cannot be undone</span>
+            </div>
+            <div class="d-flex flex-column gap-2">
+                <button class="btn sales-btn-warn btn-sm w-100 d-flex justify-content-center align-items-center gap-2" onclick="clearMonthlySales()"><i data-icon="calendar" data-size="14"></i> Clear This Month</button>
+                <button class="btn sales-btn-danger btn-sm w-100 d-flex justify-content-center align-items-center gap-2" onclick="clearAllSales()"><i data-icon="alert-triangle" data-size="14"></i> Clear All History</button>
+            </div>
+        </div>
+
+        <p id="salesDeleteResult" class="text-success mt-auto mb-0" style="font-size:13px; text-align:center;"></p>
+    </div>
+</div>
+</div>
+</div>
+
+<!-- BOTTOM ROW: Sales History Table -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0 sales-history-card" style="background:var(--bg-surface);">
+            <div class="card-header card-header-custom border-0 pb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="list" data-size="18"></i> Detailed Sales History</h5>
+                <div class="sales-history-toolbar d-flex align-items-center gap-2 flex-wrap">
+                    <label class="ff-date-field">
+                        <span class="ff-date-field__icon"><i data-icon="calendar" data-size="14"></i></span>
+                        <input type="date" id="salesRangeStart" class="form-control form-control-sm ff-date-input" style="width:148px;">
+                    </label>
+                    <span class="sales-date-sep">to</span>
+                    <label class="ff-date-field">
+                        <span class="ff-date-field__icon"><i data-icon="calendar" data-size="14"></i></span>
+                        <input type="date" id="salesRangeEnd" class="form-control form-control-sm ff-date-input" style="width:148px;">
+                    </label>
+                    <button onclick="loadSalesHistory()" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="calendar" data-size="14"></i> Apply</button>
+                    <button onclick="clearSalesRange()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="x" data-size="14"></i> Clear</button>
+                    <span class="sales-range-total-badge">Range Total: <span id="salesRangeTotal">₱0</span></span>
+                    <button onclick="loadSalesHistory()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" title="Refresh Table"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive sales-history-scroll">
+                    <table class="table table-hover align-middle mb-0 sales-history-table" style="font-size:14px; border-color:var(--border-subtle);">
+                        <thead>
+                            <tr>
+                                <th class="ps-4">Date & Time</th>
+                                <th>Device Name</th>
+                                <th>MAC Address</th>
+                                <th>Speed Limit</th>
+                                <th>Pause Limit</th>
+                                <th>Expires At</th>
+                                <th class="text-center">Coins Inserted</th>
+                                <th class="text-end pe-4">Amount (₱)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="salesHistoryTbody">
+                            <tr><td colspan="8" class="text-center py-4 text-muted">Loading history...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+<!-- REMOTE ACCESS (Tailscale — on-demand, not FastFi VPN) -->
+<div id="remoteAccessSection" class="hidden">
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="cloud" data-size="18"></i> Remote Access (Tailscale)</h5></div>
+<div class="card-body">
+<p class="text-muted small mb-3">Optional free remote Admin. Start only when you need it, then <strong>Stop</strong> to free RAM. Not connected to FastFi cloud.</p>
+<div id="remoteStatus" class="ff-status-row">
+    <div class="ff-status-item"><span class="ff-status-label">Installed</span><strong id="tsInstalled" class="text-muted">—</strong></div>
+    <div class="ff-status-item"><span class="ff-status-label">Daemon</span><span id="tsDaemon" class="badge bg-secondary">—</span></div>
+    <div class="ff-status-item"><span class="ff-status-label">Tunnel</span><span id="vpnStatus" class="badge bg-danger">Stopped</span></div>
+    <div class="ff-status-item"><span class="ff-status-label">Tailscale IP</span><strong id="vpnIP" style="color:var(--text-primary);">—</strong></div>
+    <div class="ff-status-item wide"><span class="ff-status-label">Admin URL</span><a id="remoteURL" href="#" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;word-break:break-all;">—</a></div>
+</div>
+<p id="tsMessage" class="small text-muted mt-2 mb-0"></p>
+<div class="d-flex flex-wrap gap-2 mt-3">
+    <button type="button" id="tsInstallBtn" onclick="ffTailscaleInstall(this)" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="download" data-size="14"></i> Install Tailscale</button>
+    <button type="button" id="toggleVpnBtn" onclick="ffTailscaleStart(this)" class="btn btn-primary d-inline-flex align-items-center gap-2" data-action="connect"><i data-icon="power" data-size="16"></i> Start remote</button>
+    <button type="button" id="tsStopBtn" onclick="ffTailscaleStop(this)" class="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1"><i data-icon="square" data-size="14"></i> Stop (free RAM)</button>
+    <button type="button" onclick="ffLoadTailscale()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+</div>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="key" data-size="18"></i> Auth key (one-time setup)</h5></div>
+<div class="card-body">
+<ol class="small text-muted mb-3 ps-3">
+  <li>Create a free account at <a href="https://login.tailscale.com" target="_blank" rel="noopener">login.tailscale.com</a></li>
+  <li>Install Tailscale app on your phone/laptop and sign in</li>
+  <li>Open <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener">Auth keys</a> → Generate (reusable is fine for your own routers)</li>
+  <li>Paste the key below → <strong>Start remote</strong></li>
+</ol>
+<input type="password" class="form-control" id="remoteToken" placeholder="tskey-auth-…" autocomplete="off">
+<div class="form-text">Key is stored on the router only for Start. Prefer Stop when finished so Tailscale is not left running.</div>
+<p id="tsLoginUrlWrap" class="small mt-2 mb-0 hidden">Login URL: <a id="tsLoginUrl" href="#" target="_blank" rel="noopener"></a></p>
+</div>
+</div>
+
+</div>
+<!-- NETWORK -->
+<div id="networkSection" class="hidden">
+<ul class="nav nav-pills mb-3" style="font-size:13px; gap:6px;">
+  <li class="nav-item"><button class="nav-link active" id="netTabWan" type="button" onclick="showNetPanel('wan')">WAN</button></li>
+  <li class="nav-item"><button class="nav-link" id="netTabDhcp" type="button" onclick="showNetPanel('dhcp')">DHCP Leases</button></li>
+  <li class="nav-item"><button class="nav-link" id="netTabShield" type="button" onclick="showNetPanel('shield')">Security / Shield</button></li>
+</ul>
+<div id="netWanPanel">
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="activity" data-size="18"></i> WAN Settings</h5></div>
+<div class="card-body">
+
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Connection Type</label>
+            <select class="form-select" id="proto">
+                <option value="dhcp">DHCP</option>
+                <option value="static">Static IP</option>
+                <option value="pppoe">PPPoE</option>
+            </select>
+            <p id="wanStatus" class="mt-1 mb-0 text-info fw-semibold" style="font-size:13px;"></p>
+        </div>
+    </div>
+
+    <div id="staticBox" style="display:none;" class="row mb-3 gx-3 gy-2">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">IP Address</label>
+            <input class="form-control" id="staticIp" placeholder="e.g. 192.168.1.100">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Netmask</label>
+            <input class="form-control" id="staticNetmask" value="255.255.255.0">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Gateway</label>
+            <input class="form-control" id="staticGateway" placeholder="e.g. 192.168.1.1">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">DNS</label>
+            <input class="form-control" id="staticDns" value="8.8.8.8">
+        </div>
+    </div>
+
+    <div id="pppoeBox" style="display:none;" class="row mb-3 gx-3 gy-2">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">PPPoE Username</label>
+            <input class="form-control" id="pppoeUser" placeholder="ISP username" autocomplete="off">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">PPPoE Password</label>
+            <input class="form-control" type="password" id="pppoePass" placeholder="Leave blank to keep current" autocomplete="new-password">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">MTU</label>
+            <input class="form-control" id="pppoeMtu" value="1492" placeholder="1492">
+        </div>
+        <div class="col-12">
+            <p id="pppoeHint" class="mt-1 mb-0 text-muted" style="font-size:12px;">PPPoE needs the ppp/pppoe packages, which the router installs on-demand from the internet when you first enable it. If the router is offline, enabling PPPoE fails safely without breaking the current connection.</p>
+        </div>
+    </div>
+
+    <button class="btn btn-primary d-inline-flex align-items-center gap-2 mt-2" onclick="applyWanSettings()"><i data-icon="save" data-size="16"></i> Apply WAN Settings</button>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="shield" data-size="18"></i> WAN Bufferbloat Control (SQM)</h5></div>
+<div class="card-body">
+    <p class="card-subtitle mb-3 text-muted">Shapes the entire WAN link using CAKE to reduce ping spikes and bufferbloat. Works alongside per-client speed limits.</p>
+    <div class="row mb-3 gx-3 gy-2">
+        <div class="col-md-4">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">SQM Status</label>
+            <select class="form-select" id="sqmEnabled">
+                <option value="0">Disabled</option>
+                <option value="1">Enabled</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Download (Kbps)</label>
+            <input type="number" class="form-control" id="sqmDownload" placeholder="e.g. 90000" min="100">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Upload (Kbps)</label>
+            <input type="number" class="form-control" id="sqmUpload" placeholder="e.g. 40000" min="100">
+        </div>
+    </div>
+    <div class="d-flex align-items-center gap-3">
+        <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveSqmSettings()"><i data-icon="save" data-size="16"></i> Save SQM</button>
+        <span id="sqmIfaceLabel" class="text-muted" style="font-size:11px;"></span>
+    </div>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="zap" data-size="18"></i> Speed Limit Settings</h5></div>
+<div class="card-body">
+    <p class="card-subtitle mb-4 text-muted">Configure the default speed limit applied uniformly to all connected clients.</p>
+    <div class="row mb-3 gx-3 gy-2">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Download Limit (Mbps)</label>
+            <input type="number" class="form-control" id="speedLimitDown" placeholder="e.g. 5">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Upload Limit (Mbps)</label>
+            <input type="number" class="form-control" id="speedLimitUp" placeholder="e.g. 5">
+        </div>
+    </div>
+    <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveSpeedLimit()"><i data-icon="save" data-size="16"></i> Save Speed Limit</button>
+</div>
+</div>
+</div><!-- /netWanPanel -->
+
+</div>
+<!-- WIFI -->
+<div id="wifiSection" class="hidden">
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="wifi" data-size="18"></i> SSID Settings</h5></div>
+<div class="card-body">
+    <div class="row mb-3 gx-3 gy-2">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">2.4GHz SSID</label>
+            <input type="text" class="form-control" id="ssid24">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">5GHz SSID</label>
+            <input type="text" class="form-control" id="ssid5">
+        </div>
+    </div>
+    <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveSSID()"><i data-icon="save" data-size="16"></i> Save SSID</button>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="cpu" data-size="18"></i> Sub Vendo Private WiFi</h5></div>
+<div class="card-body">
+    <p class="card-subtitle mb-3 text-muted">Separate WiFi for Sub Vendo devices to connect privately. Configure device firmware with the same SSID/password.</p>
+    <div class="alert py-2 px-3 mb-3 border-0 d-flex align-items-start gap-2" style="background:rgba(245,158,11,0.15); color:#f59e0b; font-size:13px; border-radius:8px;">
+        <i data-icon="alert-triangle" data-size="16" class="flex-shrink-0 mt-1"></i>
+        <span><strong>Important:</strong> The SSID must contain <code style="color:#f59e0b;background:rgba(0,0,0,0.2);padding:1px 5px;border-radius:3px;">KonekSik-Fi</code> in the name (e.g. <em>KonekSik-Fi-Private</em>, <em>KonekSik-Fi-ESP</em>) for ESP devices to auto-discover and connect to this network.</span>
+    </div>
+    <div class="row mb-3 gx-3 gy-2">
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">ESP WiFi SSID</label>
+            <input type="text" class="form-control" id="espSSID" placeholder="e.g., KonekSik-Fi-ESP">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">ESP WiFi Password</label>
+            <input type="password" class="form-control" id="espPassword" placeholder="WiFi Password">
+        </div>
+    </div>
+    <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveESPSSID()"><i data-icon="save" data-size="16"></i> Save ESP WiFi</button>
+    <p id="espWiFiResult" class="text-success mt-2 mb-0 fw-semibold" style="font-size:13px;"></p>
+</div>
+</div>
+
+</div>
+<!-- SETTINGS -->
+<div id="settingsSection" class="hidden">
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="key" data-size="18"></i> KonekSik-Fi License</h5></div>
+<div class="card-body">
+    
+    <div class="d-flex flex-column gap-1 mb-3 p-2 border border-secondary border-opacity-25 rounded" style="background-color: var(--bg-sidebar-hover);">
+        <div class="d-flex justify-content-between align-items-center py-1">
+            <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Device ID</span>
+            <span id="deviceId" class="font-monospace text-primary fw-bold" style="font-size:13px;">-</span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center border-top border-secondary border-opacity-25 py-1">
+            <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Status</span>
+            <span id="licenseStatus" class="status-pill inactive">-</span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center border-top border-secondary border-opacity-25 py-1">
+            <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Expires</span>
+            <span id="licenseExpiry" class="text-primary fw-bold" style="font-size:13px;">-</span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center border-top border-secondary border-opacity-25 py-1">
+            <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Plan</span>
+            <span id="licensePlan" class="status-pill inactive">-</span>
+        </div>
+        <div id="licenseKeyRow" class="d-flex justify-content-between align-items-center border-top border-secondary border-opacity-25 py-1" style="display:none;">
+            <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">License Key</span>
+            <strong id="activeLicenseKey" class="font-monospace text-primary" style="font-size:13px; word-break:break-all;">-</strong>
+        </div>
+    </div>
+    
+    <div id="licenseActivation" class="row gx-2 gy-2 align-items-end">
+        <div class="col-sm-8 col-md-6 col-lg-5">
+            <label class="text-muted fw-semibold" style="font-size:12px; margin-bottom:4px; display:block;">Activate New License</label>
+            <input type="text" class="form-control" id="licenseKey" placeholder="Enter License Code (e.g. PRO-1234)">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="activateLicense()"><i data-icon="check-circle" data-size="16"></i> Activate License</button>
+        </div>
+    </div>
+
+    <div id="licenseRevocation" class="mt-3" style="display:none;">
+        <button id="revokeLicenseBtn" class="btn btn-outline-danger d-inline-flex align-items-center gap-2" onclick="removeRouterLicense()"><i data-icon="x-circle" data-size="16"></i> Remove License</button>
+    </div>
+
+    <div class="mt-3 border-top border-secondary border-opacity-25 pt-3">
+        <div class="row g-2 align-items-center mb-2">
+            <div class="col-auto flex-grow-1" style="max-width:320px;">
+                <input type="text" class="form-control form-control-sm" id="recoverLicenseKey" placeholder="License key (optional — for rebind to a new device ID)">
+            </div>
+            <div class="col-auto">
+                <button id="recoverLicenseBtn" class="btn btn-outline-info d-inline-flex align-items-center gap-2" onclick="recoverLicense()"><i data-icon="refresh-cw" data-size="16"></i> Recover License (after reflash)</button>
+            </div>
+        </div>
+        <small class="d-block text-muted mt-1" style="font-size:11px;">Reflashed the SD card or replaced the image?
+        Leave the key blank to re-bind this device's existing license from the KonekSik-Fi Cloud (matched by Device ID, no
+        key needed). Paste your license key instead to re-bind it to this device's current ID — use this if the
+        Device ID changed (e.g. board replacement) or the key was bound under an older ID. The device must be
+        online and the key must have been previously activated.</small>
+        <p id="licenseRecoverResult" class="mt-2 fw-semibold" style="font-size:13px;"></p>
+    </div>
+
+    <p id="licenseResult" class="mt-2 text-primary fw-semibold" style="font-size:13px;"></p>
+</div>
+</div>
+
+<!-- SECURITY SETTINGS -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="shield" data-size="18"></i> Security Settings</h5></div>
+<div class="card-body">
+    
+    <div class="mb-4">
+        <label class="form-label fw-bold text-muted" style="font-size:12px;">Change Admin Password</label>
+        <div class="row gx-2 gy-2 align-items-center">
+            <div class="col-sm-8 col-md-6 col-lg-4">
+                <input type="password" class="form-control" id="newPass" placeholder="Enter new password">
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="changePassword()"><i data-icon="save" data-size="16"></i> Change Password</button>
+            </div>
+        </div>
+    </div>
+    
+    <hr class="border-secondary opacity-25">
+    
+
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="shield-off" data-size="18"></i> Anti-Tethering</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="antiTetheringToggle" onchange="toggleTethering()">
+            <label class="form-check-label" for="antiTetheringToggle">Block Hotspot Sharing</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Prevents users from bypassing billing by sharing their WiFi connection to other devices via mobile hotspot or USB tethering.</p>
+</div>
+</div>
+
+<!-- EXPIRATION ENGINE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="clock" data-size="18"></i> Session Expire duration</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="validityToggle" onchange="toggleValidity()">
+            <label class="form-check-label" for="validityToggle">Enable Session Expiration (Validity)</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Enforces an absolute expiration time on sessions based on the coin rate validity setting, terminating the session even if paused.</p>
+</div>
+</div>
+
+<!-- DATA ALLOCATION ENGINE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="database" data-size="18"></i> Data Allocation</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="dataAllocationToggle" onchange="toggleDataAllocation()">
+            <label class="form-check-label" for="dataAllocationToggle">Enable Data Limits (MB/GB)</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Automatically drops the client's connection and marks their session as expired once their data allocation is fully consumed.</p>
+</div>
+</div>
+
+<!-- PORTAL CONNECTIVITY ENGINE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="wifi-off" data-size="18"></i> Portal Connectivity</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="hideInsertToggle" onchange="toggleHideInsert()">
+            <label class="form-check-label" for="hideInsertToggle">Hide 'Insert Coin' on No Internet</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Automatically hides the insert coin button on the captive portal when the router loses its upstream internet connection, preventing users from paying for dead air.</p>
+</div>
+</div>
+
+<!-- BUY DATA FEATURE TOGGLE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="database" data-size="18"></i> Buy Data Button</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="buyDataToggle" onchange="toggleBuyData()">
+            <label class="form-check-label" for="buyDataToggle">Enable 'Buy Data' Button</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Controls the visibility of the "Buy Data" button on the client portal. Disable this to restrict customers to time-based plans only.</p>
+</div>
+</div>
+
+<!-- WIFI PASS FEATURE TOGGLE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="ticket" data-size="18"></i> Wifi Pass Button</h5></div>
+<div class="card-body">
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <div class="form-check form-switch ff-toggle mb-0">
+            <input class="form-check-input" type="checkbox" id="wipassToggle" onchange="toggleWipass()">
+            <label class="form-check-label" for="wipassToggle">Enable 'Wifi Pass' Button</label>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">Controls the visibility of the "Wifi Pass" (Voucher) button on the client portal. Disable this if you do not want to support voucher-based billing.</p>
+</div>
+</div>
+
+<!-- COINSLOT SETTINGS ENGINE -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="coins" data-size="18"></i> Coinslot Settings</h5></div>
+<div class="card-body">
+    <div class="row gx-2 gy-2 align-items-end mb-3">
+        <div class="col-sm-6 col-md-4 col-lg-3">
+            <label class="form-label" for="insertTimerInput">Insert Coin Timer (seconds)</label>
+            <input type="number" class="form-control" id="insertTimerInput" min="10" max="300" value="60">
+        </div>
+        <div class="col-sm-6 col-md-4 col-lg-3">
+            <label class="form-label" for="insertSpamLimitInput">Max Empty Tries Before Ban</label>
+            <input type="number" class="form-control" id="insertSpamLimitInput" min="1" max="50" value="5">
+        </div>
+        <div class="col-sm-12 col-md-8 col-lg-6">
+            <label class="form-label" for="bannerTextInput">Running Banner Text</label>
+            <input type="text" class="form-control" id="bannerTextInput" placeholder="Insert coin or enter voucher to start">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary d-inline-flex align-items-center gap-2" id="saveCoinslotSettingsBtn" onclick="saveCoinslotSettings()"><i data-icon="save" data-size="16"></i> Save</button>
+        </div>
+    </div>
+    <p class="ff-desc mb-0">
+        <strong>Timer:</strong> How long clients have to insert coins before the session auto-cancels (10–300s).<br>
+        <strong>Ban:</strong> After this many "Insert Coin" attempts without inserting any coins, the client is blocked from locking coinslots for 5 minutes.<br>
+        <strong>Running Banner Text:</strong> The scrolling text displayed on the captive portal page.
+    </p>
+</div>
+</div>
+
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="pause-circle" data-size="18"></i> Pause Limit Settings</h5></div>
+<div class="card-body">
+<div class="d-flex align-items-center gap-3 mb-2">
+    <div class="form-check form-switch ff-toggle mb-0">
+        <input class="form-check-input" type="checkbox" role="switch" id="pauseLimitEnabled" checked>
+        <label class="form-check-label" for="pauseLimitEnabled">Enable Global Pause Limit</label>
+    </div>
+</div>
+<p class="ff-desc mb-3">Limit how many times a client can pause their session globally.</p>
+<div class="row gx-2 gy-2 align-items-end">
+    <div class="col-sm-8 col-md-6 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Pause Limit (times)</label>
+        <input type="number" class="form-control" id="pauseLimitInput" value="10" min="0" max="100">
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="savePauseLimit()"><i data-icon="save" data-size="16"></i> Save Limit</button>
+    </div>
+</div>
+</div>
+</div>
+
+<!-- AUTO-PAUSE SETTINGS -->
+<div class="card shadow-sm mb-4 border-0">
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="timer" data-size="18"></i> Auto-Pause Settings</h5></div>
+<div class="card-body">
+<p class="card-subtitle mb-3 text-muted">Automatically pause sessions when clients disconnect from WiFi</p>
+<div class="d-flex flex-wrap gap-4 mb-3">
+    <div class="form-check form-switch ff-toggle">
+        <input class="form-check-input" type="checkbox" role="switch" id="autopauseEnabled">
+        <label class="form-check-label" for="autopauseEnabled">Enable Auto-Pause</label>
+    </div>
+    <div class="form-check form-switch ff-toggle">
+        <input class="form-check-input" type="checkbox" role="switch" id="autopauseAutoResume" checked>
+        <label class="form-check-label" for="autopauseAutoResume">Auto-Resume on Reconnect</label>
+    </div>
+</div>
+<div class="row gx-2 gy-2 align-items-end">
+    <div class="col-sm-8 col-md-6 col-lg-3">
+        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Grace Period (sec)</label>
+        <input type="number" class="form-control" id="autopauseGracePeriod" value="60" min="10" max="600">
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveAutopauseConfig()"><i data-icon="save" data-size="16"></i> Save Config</button>
+    </div>
+</div>
+</div>
+</div>
+
+
+
+
+
+
+</div> <!-- settingsSection -->
+
+
+
+
+<div id="captivePortalSection" class="hidden">
+<h3 class="section-title mb-3">Captive Portal</h3>
+<p class="text-muted mb-2" style="font-size:13px;">Configure guest branding on the left. The right column is a scaled live mock of the CEBJ.NET portal — banner preview uses a local file pick only (no appliance asset fetch).</p>
+<p class="cp-help-banner mb-3">
+  <strong>Live Preview</strong> is in the column beside this form (on phones it appears <em>above</em> the uploads). Pick a banner file to see it in the mock portal — it does not auto-load saved appliance images.
+</p>
+
+<div class="card shadow-sm mb-4 border-0 cp-layout-card">
+<div class="card-body">
+<div class="cp-grid">
+
+  <!-- LEFT — Portal Configuration -->
+  <div class="cp-config-col">
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-3 flex-wrap">
+      <h5 class="mb-0 fw-bold d-flex align-items-center gap-2"><i data-icon="settings" data-size="18"></i> Portal Configuration</h5>
+      <span id="cpSyncPill" class="cp-sync-pill">Synced</span>
+    </div>
+
+    <h6 class="fw-bold mb-1">Banner upload</h6>
+    <p class="text-muted mb-2" style="font-size:13px;">Recommended 800×200, JPEG/PNG (max 5MB). Live Preview updates from this pick only.</p>
+    <div class="row gx-2 gy-2 align-items-center mb-1">
+      <div class="col-sm-8">
+        <input class="form-control" type="file" id="bannerFile" accept="image/jpeg,image/png">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="uploadBanner()"><i data-icon="upload-cloud" data-size="16"></i> Upload</button>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" type="button" onclick="restoreDefaultBanner()"><i data-icon="rotate-ccw" data-size="16"></i> Restore Default</button>
+      </div>
+    </div>
+    <img id="cpBannerThumb" class="cp-thumb" alt="Selected banner thumbnail">
+    <p id="currentBannerStatus" class="small mb-1 mt-2 fw-semibold text-muted">Using Default-Banner.png</p>
+    <p id="bannerResult" class="mt-1 mb-3 fw-semibold" style="font-size:12px;"></p>
+
+    <hr class="border-secondary border-opacity-25 my-3">
+
+    <h6 class="fw-bold mb-1">Insert Coin background music</h6>
+    <p class="text-muted mb-2" style="font-size:13px;">MP3 only. Live Preview plays a local pending pick only (not the saved appliance file).</p>
+    <div class="row gx-2 gy-2 align-items-center mb-2">
+      <div class="col-sm-8">
+        <input class="form-control form-control-sm" type="file" id="audioFile_bg" accept=".mp3,audio/mpeg">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" id="btnUpload_bg" onclick="uploadAudio('bg')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
+      </div>
+    </div>
+    <div class="border border-secondary border-opacity-25 rounded p-2 mb-2" style="background-color: var(--bg-sidebar-hover); max-width: 400px;">
+      <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Saved on appliance</span>
+      <audio id="audioPreview_bg" controls src="/audio/insert.mp3" style="width: 100%; height: 30px;"></audio>
+    </div>
+    <p id="audioResult_bg" class="mb-3 fw-semibold" style="font-size:12px;"></p>
+
+    <h6 class="fw-bold mb-1">Coin inserted sound</h6>
+    <div class="row gx-2 gy-2 align-items-center mb-2">
+      <div class="col-sm-8">
+        <input class="form-control form-control-sm" type="file" id="audioFile_coin" accept=".mp3,audio/mpeg">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" id="btnUpload_coin" onclick="uploadAudio('coin')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
+      </div>
+    </div>
+    <audio id="audioPreview_coin" controls src="/audio/coin.mp3" class="mb-2" style="width: 100%; max-width:400px; height: 30px;"></audio>
+    <p id="audioResult_coin" class="mb-3 fw-semibold" style="font-size:12px;"></p>
+
+    <h6 class="fw-bold mb-1">Done / Success sound</h6>
+    <div class="row gx-2 gy-2 align-items-center mb-2">
+      <div class="col-sm-8">
+        <input class="form-control form-control-sm" type="file" id="audioFile_success" accept=".mp3,audio/mpeg">
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" id="btnUpload_success" onclick="uploadAudio('success')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
+      </div>
+    </div>
+    <audio id="audioPreview_success" controls src="/audio/success.mp3" class="mb-2" style="width: 100%; max-width:400px; height: 30px;"></audio>
+    <p id="audioResult_success" class="mb-0 fw-semibold" style="font-size:12px;"></p>
+  </div>
+
+  <!-- RIGHT — Live Preview -->
+  <div class="cp-preview-col">
+    <div class="portal-live-preview" id="captivePortalLivePreview">
+      <h5 class="portal-live-preview__title">Live Preview</h5>
+      <p class="portal-live-preview__help">Guest portal mock (not a live session). Banner shows only after you pick a local file. Insert Coin is preview-only.</p>
+      <div class="portal-live-preview__viewport" id="plpViewport">
+        <div class="portal-live-preview__scale-wrap" id="plpScaleWrap">
+          <div class="portal-live-preview__shell" id="plpShell">
+            <div class="plp-banner" id="plpBanner">
+              <img id="plpBannerImg" alt="Portal banner preview">
+              <div class="plp-banner__placeholder" id="plpBannerPlaceholder">
+                <strong>Default banner</strong>
+                Pick an image to preview the uploaded banner.
+              </div>
+            </div>
+
+            <section class="plp-panel">
+              <p class="plp-kicker">STATUS</p>
+              <div class="plp-status">
+                <strong id="plpStatus" class="is-off">Disconnected</strong>
+              </div>
+              <small class="plp-date" id="plpDate"></small>
+            </section>
+
+            <section class="plp-panel plp-device">
+              <article>
+                <p>IP ADDRESS</p>
+                <strong>10.20.0.50</strong>
+              </article>
+              <article>
+                <p>MAC ADDRESS</p>
+                <strong>AA:BB:CC:DD:EE:FF</strong>
+              </article>
+              <article class="credits">
+                <p>ACCOUNT CREDITS</p>
+                <strong id="plpCredits">₱0.00</strong>
+              </article>
+            </section>
+
+            <section class="plp-panel">
+              <p class="plp-kicker">REMAINING TIME</p>
+              <div class="plp-timer" id="plpTimer">00:00:00</div>
+              <div class="plp-timer-labels"><span>HRS</span><span>MINS</span><span>SECS</span></div>
+            </section>
+
+            <button type="button" class="plp-btn blue" disabled aria-disabled="true" aria-hidden="true" tabindex="-1">
+              <span>VIEW RATES</span><span>›</span>
+            </button>
+            <button type="button" class="plp-btn green" id="plpInsertCoin">
+              <span>INSERT COIN</span><span>›</span>
+            </button>
+            <button type="button" class="plp-btn amber" disabled aria-disabled="true" aria-hidden="true" tabindex="-1">
+              <span>PAUSE</span><span>›</span>
+            </button>
+
+            <section class="plp-panel plp-voucher" aria-hidden="true">
+              <h2>HAVE A VOUCHER?</h2>
+              <div class="plp-voucher-row">
+                <input type="text" placeholder="ENTER VOUCHER CODE HERE..." disabled tabindex="-1">
+                <button type="button" disabled tabindex="-1">CONNECT</button>
+              </div>
+            </section>
+
+            <footer class="plp-footer">
+              <div class="strip" aria-hidden="true"></div>
+              <p>Powered by <strong>CEBJ.NET</strong></p>
+              <small>Thank you for using our service!</small>
+            </footer>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+</div> <!-- captivePortalSection -->
+
+
+
+
+<div id="updateSection" class="hidden">
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="refresh-cw" data-size="18"></i> System OTA Update</h5></div>
+        <div class="card-body text-center py-5">
+            <div class="mb-4">
+                <i data-icon="download-cloud" data-size="64" class="text-primary mb-3"></i>
+                <h4>Firmware Update Manager</h4>
+                <p class="text-muted">Current Version: <strong id="currentVersionLabel">--</strong></p>
+            </div>
+
+            <div style="max-width: 500px; margin: 0 auto;">
+                <div class="d-flex gap-2 justify-content-center mb-3">
+                    <button id="btnOTA_Check" class="btn btn-primary d-flex align-items-center gap-2"><i data-icon="search" data-size="18"></i> Check for Updates</button>
+                    <button id="btnOTA_Proceed" class="btn btn-success d-flex align-items-center gap-2" disabled><i data-icon="zap" data-size="18"></i> Apply Update Now</button>
+                </div>
+
+                <!-- Progress Section -->
+                <div id="otaProgressContainer" class="mt-4" style="display:none;">
+                    <div class="progress mb-2" style="height: 10px; border-radius: 5px; background-color: rgba(0,0,0,0.05);">
+                        <div id="otaProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%; transition: width 0.3s;"></div>
+                    </div>
+                    <p id="otaProgressLabel" class="text-muted small mb-0">Starting download...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="upload-cloud" data-size="18"></i> KonekSik Firmware</h5></div>
+        <div class="card-body">
+            <p class="text-muted small mb-2">Update <strong>KonekSik</strong> using the standard OpenWrt sysupgrade process. Upload a KonekSik/OpenWrt <code>.bin</code> built for <code>ruijie,rg-ew1200g-pro-v1.1</code>.</p>
+            <p class="text-muted small">This path does <strong>not</strong> install official Ruijie/Reyee OEM packages. Use the OEM section below to restore ReyeeOS.</p>
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-md-8">
+                    <label class="form-label small mb-1">KonekSik sysupgrade file (.bin)</label>
+                    <input type="file" id="ffFirmwareFile" class="form-control form-control-sm" accept=".bin,application/octet-stream">
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-warning btn-sm w-100" onclick="ffUploadFirmware()">Upload KonekSik Firmware</button>
+                </div>
+            </div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="ffFwConfirmStock">
+                <label class="form-check-label small" for="ffFwConfirmStock">I understand flashing replaces the running firmware and reboots the router</label>
+            </div>
+            <button class="btn btn-danger btn-sm" id="ffFwFlashBtn" onclick="ffFlashUploadedFirmware()" disabled>Flash KonekSik firmware (reboot)</button>
+            <p id="ffFwStatus" class="small text-muted mt-2 mb-0">No KonekSik firmware staged.</p>
+            <p class="text-muted mt-2 mb-0" style="font-size:11px;"><strong>Safety:</strong> Keep a backup first. OpenWrt image metadata validation still applies on this path.</p>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4 border-0 border-danger" style="border-width:1px !important;">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="shield" data-size="18"></i> OEM Firmware — ReyeeOS</h5></div>
+        <div class="card-body">
+            <p class="text-muted small mb-2">Restore official <strong>Ruijie/Reyee</strong> firmware (ReyeeOS) on RG-EW1200G PRO. Supported package example: <code>EW_3.0(1)B11P313_*_encrypto.tar.gz</code>.</p>
+            <div class="alert alert-warning py-2 small mb-3">Installing OEM firmware will replace KonekSik and reboot the router. Only use official firmware intended for this device. Factory / product_info / U-Boot are not written by this feature.</div>
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-md-8">
+                    <label class="form-label small mb-1">Official OEM package (.tar.gz) or decrypted rgos.bin</label>
+                    <input type="file" id="ffOemFirmwareFile" class="form-control form-control-sm" accept=".tar.gz,.gz,.bin,application/gzip,application/octet-stream">
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-outline-primary btn-sm w-100" onclick="ffUploadOemFirmware()">Upload OEM Firmware</button>
+                </div>
+            </div>
+            <div id="ffOemReport" class="small mb-3" style="display:none; background:rgba(0,0,0,0.04); border-radius:6px; padding:12px;"></div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="ffOemConfirm">
+                <label class="form-check-label small" for="ffOemConfirm">I understand this will erase KonekSik and install ReyeeOS on the firmware partition</label>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-outline-secondary btn-sm" id="ffOemCancelBtn" onclick="ffCancelOemFirmware()" disabled>Cancel</button>
+                <button class="btn btn-danger btn-sm" id="ffOemFlashBtn" onclick="ffFlashOemFirmware()" disabled>Install OEM Firmware</button>
+            </div>
+            <p id="ffOemStatus" class="small text-muted mt-2 mb-0">No OEM firmware validated.</p>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <!-- Backup & Rollback (Item 4) -->
+    <!-- ════════════════════════════════════════════════════════════ -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="database" data-size="18"></i> Backup &amp; Rollback</h5></div>
+        <div class="card-body">
+            <div class="ff-status-row mb-3">
+                <div class="ff-status-item"><span class="ff-status-label">Rollback</span><span id="rollbackArmedBadge" class="badge bg-secondary">Idle</span></div>
+                <div class="ff-status-item wide"><span class="ff-status-label">Pending OTA</span><strong id="rollbackPendingInfo" class="text-muted">—</strong></div>
+            </div>
+            <p class="text-muted small mb-3">Before every OTA apply, KonekSik-Fi snapshots your config, data, and (for overlay updates) code to <code>/www/data/backups/</code>. If an update leaves the box unhealthy on reboot, the rollback watchdog restores the previous state automatically. You can also back up or restore manually here.</p>
+
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="backupNow(this)"><i data-icon="save" data-size="16"></i> Backup Now</button>
+                <button class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" onclick="loadBackupList()"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+                <div class="form-check ms-2 mb-0">
+                    <input class="form-check-input" type="checkbox" id="backupFullMode">
+                    <label class="form-check-label small" for="backupFullMode" title="Also snapshot code (/www, lua, libexec) so a restore can roll back an overlay update. Needs more free space.">Include code (full)</label>
+                </div>
+            </div>
+
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-8 col-md-9"><label class="form-label small mb-1">Restore a snapshot</label><select id="restoreSelect" class="form-select form-select-sm" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"><option value="">— select a backup —</option></select></div>
+                <div class="col-4 col-md-3"><button class="btn btn-warning btn-sm w-100 d-inline-flex align-items-center justify-content-center gap-1" onclick="restoreBackup()"><i data-icon="rotate-ccw" data-size="14"></i> Restore</button></div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead><tr><th>Snapshot</th><th style="width:90px;">Size</th><th style="width:70px;">&nbsp;</th></tr></thead>
+                    <tbody id="backupListTbody"><tr><td colspan="3" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+            <p class="text-muted mt-2 mb-0" style="font-size:11px;"><strong>Note:</strong> This restores configuration, data, and (for overlay updates) code — not the kernel. A firmware (<code>.bin</code>) update that breaks the kernel cannot be rolled back in-device (no A/B partition); recovery then requires an external SD-card reflash tool. Restoring overwrites current config — reboot the router afterward.</p>
+        </div>
+    </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- DHCP LEASES -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="dhcpSection" class="hidden">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb" style="font-size:12px; margin:0;">
+            <li class="breadcrumb-item">Network</li>
+            <li class="breadcrumb-item active" aria-current="page">DHCP Leases</li>
+        </ol>
+    </nav>
+
+    <!-- Live Leases -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+            <h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="list" data-size="18"></i> Live DHCP Leases</h5>
+            <button class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" onclick="loadDhcpLeases()">
+                <i data-icon="refresh-cw" data-size="12"></i> Refresh
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead><tr><th>MAC</th><th>IP</th><th>Hostname</th><th>Expires</th><th>Session</th></tr></thead>
+                    <tbody id="dhcpLeasesTbody"><tr><td colspan="5" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Static Leases -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="lock" data-size="18"></i> Static Leases (Reserved IP per MAC)</h5></div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-2">
+                    <thead><tr><th>MAC</th><th>IP</th><th>Hostname</th><th style="width:90px;">&nbsp;</th></tr></thead>
+                    <tbody id="dhcpStaticTbody"><tr><td colspan="4" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+            <div class="row g-2 align-items-end">
+                <div class="col-6 col-md-4"><label class="form-label small mb-1">MAC</label><input type="text" id="dhcpStaticMac" class="form-control form-control-sm" placeholder="aa:bb:cc:dd:ee:ff" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"></div>
+                <div class="col-6 col-md-3"><label class="form-label small mb-1">IP</label><input type="text" id="dhcpStaticIp" class="form-control form-control-sm" placeholder="10.0.0.50" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"></div>
+                <div class="col-6 col-md-3"><label class="form-label small mb-1">Hostname</label><input type="text" id="dhcpStaticName" class="form-control form-control-sm" placeholder="optional" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"></div>
+                <div class="col-6 col-md-2"><button class="btn btn-primary btn-sm w-100 d-inline-flex align-items-center justify-content-center gap-1" onclick="addDhcpStatic()"><i data-icon="plus" data-size="14"></i> Add</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DHCP Pools -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="server" data-size="18"></i> DHCP Pools</h5></div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead><tr><th>Interface</th><th>Section</th><th>Start</th><th>Limit</th><th>Lease Time</th><th style="width:90px;">&nbsp;</th></tr></thead>
+                    <tbody id="dhcpPoolsTbody"><tr><td colspan="6" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+            <p class="text-muted mt-2 mb-0" style="font-size:12px;">Edit a pool then click Save. Sub-vendo pools (<code>sv*</code>) are managed automatically and may be overwritten.</p>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- FASTFI SHIELD -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="shieldSection" class="hidden">
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb" style="font-size:12px; margin:0;">
+            <li class="breadcrumb-item">Network</li>
+            <li class="breadcrumb-item active" aria-current="page">Security / Shield</li>
+        </ol>
+    </nav>
+
+    <!-- Starlink Shield -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+            <h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="shield" data-size="18"></i> KonekSik-Fi Starlink Shield</h5>
+            <span id="shieldProtectionBadge" class="badge bg-secondary">Inactive</span>
+        </div>
+        <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="shieldToggleStarlink" onchange="toggleShieldStarlink()">
+                        <label class="form-check-label" for="shieldToggleStarlink">Block Starlink management domains</label>
+                    </div>
+                    <small class="text-muted">Null-routes the Starlink dish/app/portal hostnames so customers can't reach the Starlink management plane through the vendo.</small>
+                </div>
+            </div>
+            <div class="d-flex gap-2 mb-2">
+                <button class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" onclick="syncStarlinkNow()"><i data-icon="refresh-cw" data-size="14"></i> Sync Starlink IPs Now</button>
+                <button class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1" onclick="applyShield()"><i data-icon="zap" data-size="14"></i> Apply Now</button>
+            </div>
+            <div id="shieldStatusLine" class="fw-semibold" style="font-size:13px;"></div>
+        </div>
+    </div>
+
+    <!-- Anti-bypass -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="lock" data-size="18"></i> Anti-Bypass</h5></div>
+        <div class="card-body">
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="shieldToggleForceDns" onchange="toggleForceDns()">
+                <label class="form-check-label" for="shieldToggleForceDns">Force client DNS to router</label>
+            </div>
+            <small class="text-muted d-block mb-3">Redirects any DNS query (udp/tcp 53) from LAN clients to the local resolver so they can't bypass the blocklist with an external DNS server.</small>
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="shieldToggleDoh" onchange="toggleDoh()">
+                <label class="form-check-label" for="shieldToggleDoh">Block DoH (DNS-over-HTTPS)</label>
+            </div>
+            <small class="text-muted d-block mb-3">Null-routes common DoH providers (dns.google, cloudflare-dns.com) so browsers can't switch to an HTTPS resolver.</small>
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="shieldToggleQuic" onchange="toggleQuic()">
+                <label class="form-check-label" for="shieldToggleQuic">Block QUIC (udp/443)</label>
+            </div>
+            <small class="text-muted d-block"><span class="text-warning">Experimental — may break HTTP/3.</span> Drops outbound udp/443 so clients fall back to TCP.</small>
+        </div>
+    </div>
+
+    <!-- Blocked Sites -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="ban" data-size="18"></i> Blocked Sites</h5></div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-2">
+                    <thead><tr><th>Domain</th><th>Source</th><th style="width:90px;">&nbsp;</th></tr></thead>
+                    <tbody id="shieldBlockedTbody"><tr><td colspan="3" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+            <div class="row g-2 align-items-end">
+                <div class="col-8 col-md-9"><input type="text" id="shieldBlockedInput" class="form-control form-control-sm" placeholder="facebook.com" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"></div>
+                <div class="col-4 col-md-3"><button class="btn btn-primary btn-sm w-100" onclick="addShieldBlocked()">Block</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Allowed Sites -->
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="check-circle" data-size="18"></i> Allowed Sites (Override)</h5></div>
+        <div class="card-body">
+            <p class="text-muted" style="font-size:12px;">An allowed domain overrides the blocklist. Allowing <code>m.facebook.com</code> un-blocks it even while <code>facebook.com</code> stays blocked.</p>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-2">
+                    <thead><tr><th>Domain</th><th style="width:90px;">&nbsp;</th></tr></thead>
+                    <tbody id="shieldAllowedTbody"><tr><td colspan="2" class="text-muted">Loading...</td></tr></tbody>
+                </table>
+            </div>
+            <div class="row g-2 align-items-end">
+                <div class="col-8 col-md-9"><input type="text" id="shieldAllowedInput" class="form-control form-control-sm" placeholder="m.facebook.com" style="background-color:var(--bs-dark);border-color:var(--bs-gray-700);color:#fff;"></div>
+                <div class="col-4 col-md-3"><button class="btn btn-success btn-sm w-100" onclick="addShieldAllowed()">Allow</button></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== EXTENDED FEATURE SECTIONS ===== -->
+<div id="plansSection" class="hidden">
+  <div class="d-flex justify-content-end mb-3">
+    <button class="btn btn-primary btn-sm" onclick="ffOpenPlanModal()">Add Plan</button>
+  </div>
+  <div class="card shadow-sm border-0 mb-3">
+    <div class="card-header card-header-custom">
+      <h5 class="card-header-title mb-0">Subscription / timed plans</h5>
+    </div>
+    <div class="card-body table-responsive p-0">
+      <table class="table table-hover align-middle mb-0 ff-even-table"><thead><tr>
+        <th>Name</th><th>Price</th><th>Duration</th><th>Data</th><th>Profile</th><th>Pause</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="ffPlansTable"><tr><td colspan="7" class="text-muted text-center">Loading…</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div id="bandwidthSection" class="hidden">
+  <div class="d-flex justify-content-end mb-2">
+    <button class="btn btn-primary btn-sm" onclick="ffOpenProfileModal()">Add Profile</button>
+  </div>
+  <p class="text-muted small mb-2">Speed profiles for plans on this dual-band Ruijie — set download/upload and prefer 2.4 GHz, 5 GHz, or Auto.</p>
+  <div class="row g-2 mb-3" id="ffBandwidthCards"></div>
+  <div class="card shadow-sm border-0 ff-traffic-card">
+    <div class="card-header card-header-custom py-2">
+      <h5 class="card-header-title mb-0">Current Traffic</h5>
+      <span class="text-muted small" id="ffTrafficLiveLabel">Download — · Upload —</span>
+    </div>
+    <div class="card-body py-2">
+      <div class="ff-traffic-chart-wrap">
+        <canvas id="ffTrafficChart"></canvas>
+      </div>
+      <div class="ff-chart-legend mt-1">
+        <span><i style="background:#2563eb"></i>Download</span>
+        <span><i style="background:#0ea5e9"></i>Upload</span>
+      </div>
+    </div>
+  </div>
+  <table class="d-none"><tbody id="ffProfilesTable"></tbody></table>
+</div>
+
+<div id="planClientsSection" class="hidden">
+  <div class="d-flex justify-content-end mb-3">
+    <button class="btn btn-primary btn-sm" onclick="ffOpenClientModal()">Add Client</button>
+  </div>
+  <div class="card shadow-sm border-0 mb-3">
+    <div class="card-header card-header-custom">
+      <h5 class="card-header-title mb-0">Households / named customers</h5>
+    </div>
+    <div class="card-body table-responsive p-0">
+      <table class="table table-hover align-middle mb-0 ff-even-table">
+        <thead><tr><th>Name</th><th>Contact</th><th>Plan</th><th>Status</th><th>Devices</th><th>Actions</th></tr></thead>
+        <tbody id="ffPlanClientsTable"><tr><td colspan="6" class="text-muted text-center">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="devicesSection" class="hidden">
+  <h3 class="section-title mb-3">Connected Devices</h3>
+  <div class="card shadow-sm border-0 mb-3">
+    <div class="card-header card-header-custom">
+      <h5 class="card-header-title mb-0">LAN / Wi‑Fi clients</h5>
+      <button class="btn btn-outline-secondary btn-sm" onclick="ffLoadDevices()">Refresh</button>
+    </div>
+    <div class="card-body table-responsive">
+      <table class="table table-hover align-middle"><thead><tr><th>Host</th><th>MAC</th><th>IP</th><th>Status</th><th>Radio</th><th></th></tr></thead>
+      <tbody id="ffDevicesTable"><tr><td colspan="6" class="text-muted">Loading…</td></tr></tbody></table>
+    </div>
+  </div>
+  <div class="card shadow-sm border-0 mb-3">
+    <div class="card-header card-header-custom"><h5 class="card-header-title mb-0">MAC Blocklist</h5></div>
+    <div class="card-body">
+      <div class="row g-2 mb-3">
+        <div class="col-md-3"><input id="ffBlockMac" class="form-control form-control-sm" placeholder="AA:BB:CC:DD:EE:FF"></div>
+        <div class="col-md-5"><input id="ffBlockReason" class="form-control form-control-sm" placeholder="Reason"></div>
+        <div class="col-md-2"><button class="btn btn-danger btn-sm w-100" onclick="ffBlockMac()">Block</button></div>
+      </div>
+      <table class="table table-sm"><thead><tr><th>MAC</th><th>Reason</th><th></th></tr></thead>
+      <tbody id="ffBlockTable"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div id="waitingSection" class="hidden">
+  <h3 class="section-title mb-3">Waiting Queue</h3>
+  <div class="card shadow-sm border-0"><div class="card-body table-responsive">
+    <table class="table"><thead><tr><th>Host</th><th>MAC</th><th>IP</th><th>Radio</th></tr></thead>
+    <tbody id="ffWaitingTable"><tr><td colspan="4" class="text-muted">Loading…</td></tr></tbody></table>
+  </div></div>
+</div>
+
+<div id="radioSection" class="hidden">
+  <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+    <div>
+      <h3 class="section-title mb-1">Radio Status</h3>
+      <p class="text-muted small mb-0">Built-in Ruijie Wi‑Fi radios (<code>wlan0</code> / <code>wlan1</code>) — not LAN Access Points.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" onclick="ffLoadRadios()">Refresh</button>
+      <button class="btn btn-warning btn-sm" onclick="ffRestartRadio()">Restart all Wi‑Fi</button>
+    </div>
+  </div>
+  <div class="ff-radio-note mb-3">
+    For coverage APs plugged into Ethernet (or a switch), use <strong>Access Points</strong>. This page only shows the router’s own radios via <code>iwinfo</code>.
+  </div>
+  <div id="ffRadioHero" class="ff-radio-hero"></div>
+  <div id="ffRadioCards" class="row g-3"></div>
+</div>
+
+<div id="accessPointsSection" class="hidden">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <h3 class="section-title mb-1">Access Points</h3>
+      <p class="text-muted small mb-0">Built-in Ruijie radios plus LAN APs plugged into Ethernet for coverage. Bind Sub Vendo ESP32 units to each AP.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" onclick="ffLoadAccessPoints()">Refresh</button>
+      <button class="btn btn-primary btn-sm" onclick="ffOpenApModal()">Add LAN AP</button>
+    </div>
+  </div>
+  <div class="card shadow-sm border-0 mb-3">
+    <div class="table-responsive">
+      <table class="table table-hover table-sm align-middle mb-0">
+        <thead class="table-dark">
+          <tr><th>Name</th><th>Type</th><th>MAC / IP</th><th>Location</th><th>Status</th><th>ESP bound</th><th></th></tr>
+        </thead>
+        <tbody id="ffApTable"><tr><td colspan="7" class="text-muted text-center">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0 mb-3" id="ffBindSuggestCard">
+    <div class="card-header card-header-custom">
+      <h5 class="card-header-title mb-0">Recommended bind</h5>
+      <span class="badge bg-secondary">Suggestion only</span>
+    </div>
+    <div class="card-body">
+      <p class="text-muted small mb-2 mb-md-3">
+        These are <strong>optional tips</strong> (e.g. one ESP per AP that has none yet).
+        They do not change anything until you choose to use them. You still pick the final ESP ↔ AP in the form below.
+      </p>
+      <div id="ffBindSuggestList" class="small">
+        <span class="text-muted">Loading suggestions…</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0">
+    <div class="card-header card-header-custom"><h5 class="card-header-title mb-0">Bind ESP32 → Access Point</h5></div>
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label small mb-1">ESP / Sub Vendo</label>
+          <select id="ffBindEsp" class="form-select form-select-sm"></select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small mb-1">Access Point</label>
+          <select id="ffBindAp" class="form-select form-select-sm"></select>
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-primary btn-sm w-100" onclick="ffBindEspAp()">Bind</button>
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-outline-secondary btn-sm w-100" onclick="ffBindEspAp(0)">Unbind</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AP modal -->
+<div id="ffApModal" class="modal-overlay" style="display:none;z-index:9990;">
+  <div class="modal-card" style="max-width:460px;">
+    <h3 id="ffApModalTitle" style="margin-bottom:12px;">Access Point</h3>
+    <input type="hidden" id="ffApId">
+    <div class="mb-2"><label class="form-label small">Name</label><input id="ffApName" class="form-control form-control-sm" placeholder="Hallway AP"></div>
+    <div class="mb-2"><label class="form-label small">MAC</label><input id="ffApMac" class="form-control form-control-sm" placeholder="AA:BB:CC:DD:EE:FF"></div>
+    <div class="mb-2"><label class="form-label small">IP (for ping status)</label><input id="ffApIp" class="form-control form-control-sm" placeholder="192.168.1.20"></div>
+    <div class="mb-2"><label class="form-label small">Location</label><input id="ffApLoc" class="form-control form-control-sm" placeholder="2nd floor"></div>
+    <div class="mb-2"><label class="form-label small">Notes</label><textarea id="ffApNotes" class="form-control form-control-sm" rows="2"></textarea></div>
+    <div class="d-flex gap-2 justify-content-end mt-3">
+      <button class="btn btn-outline-secondary btn-sm" onclick="ffCloseApModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="ffSaveAp()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bandwidth profile modal -->
+<div id="ffProfileModal" class="modal-overlay" style="display:none;z-index:9990;">
+  <div class="modal-card" style="max-width:420px;">
+    <h3 id="ffProfileModalTitle" style="margin-bottom:12px;">Bandwidth Profile</h3>
+    <input type="hidden" id="ffProfileId">
+    <input type="hidden" id="ffProfileEnabled" value="1">
+    <div class="mb-3">
+      <label class="form-label small fw-semibold">Profile name</label>
+      <input id="ffProfileName" class="form-control" placeholder="e.g. Standard" autocomplete="off">
+    </div>
+    <div class="row g-2 mb-3">
+      <div class="col-6">
+        <label class="form-label small fw-semibold">Download (Mbps)</label>
+        <input id="ffProfileDown" type="number" min="0" step="0.1" class="form-control" placeholder="10">
+      </div>
+      <div class="col-6">
+        <label class="form-label small fw-semibold">Upload (Mbps)</label>
+        <input id="ffProfileUp" type="number" min="0" step="0.1" class="form-control" placeholder="5">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label small fw-semibold">Wi‑Fi band</label>
+      <select id="ffProfileBand" class="form-select">
+        <option value="auto">Auto (2.4 + 5 GHz)</option>
+        <option value="2.4">2.4 GHz only</option>
+        <option value="5">5 GHz only</option>
+      </select>
+      <div class="form-text">Dual-band Ruijie: Auto lets clients pick; lock to one band when you want to steer traffic.</div>
+    </div>
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-outline-secondary" onclick="ffCloseProfileModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" onclick="ffSaveProfile()">Save Profile</button>
+    </div>
+  </div>
+</div>
+
+<!-- Plan modal -->
+<div id="ffPlanModal" class="modal-overlay" style="display:none;z-index:9990;">
+  <div class="modal-card" style="max-width:460px;">
+    <h3 id="ffPlanModalTitle" style="margin-bottom:12px;">Plan</h3>
+    <input type="hidden" id="ffPlanId">
+    <div class="mb-2"><label class="form-label small fw-semibold">Plan name</label><input id="ffPlanName" class="form-control form-control-sm" placeholder="Day Pass"></div>
+    <div class="row g-2 mb-2">
+      <div class="col-6"><label class="form-label small fw-semibold">Price (₱)</label><input id="ffPlanPrice" type="number" min="0" step="1" class="form-control form-control-sm"></div>
+      <div class="col-6"><label class="form-label small fw-semibold">Duration (min)</label><input id="ffPlanDuration" type="number" min="1" class="form-control form-control-sm"></div>
+    </div>
+    <div class="row g-2 mb-2">
+      <div class="col-6"><label class="form-label small fw-semibold">Data MB (0=∞)</label><input id="ffPlanData" type="number" min="0" class="form-control form-control-sm"></div>
+      <div class="col-6"><label class="form-label small fw-semibold">Pause limit</label><input id="ffPlanPause" type="number" min="0" class="form-control form-control-sm"></div>
+    </div>
+    <div class="mb-3"><label class="form-label small fw-semibold">Bandwidth profile</label><select id="ffPlanProfile" class="form-select form-select-sm"><option value="0">None</option></select></div>
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="ffClosePlanModal()">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="ffSavePlan()">Save Plan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Plan client modal -->
+<div id="ffClientModal" class="modal-overlay" style="display:none;z-index:9990;">
+  <div class="modal-card" style="max-width:460px;">
+    <h3 id="ffClientModalTitle" style="margin-bottom:12px;">Plan Client</h3>
+    <input type="hidden" id="ffClientId">
+    <div class="mb-2"><label class="form-label small fw-semibold">Client name</label><input id="ffClientName" class="form-control form-control-sm" placeholder="Juan dela Cruz"></div>
+    <div class="mb-2"><label class="form-label small fw-semibold">Contact</label><input id="ffClientContact" class="form-control form-control-sm" placeholder="09xx…"></div>
+    <div class="mb-2"><label class="form-label small fw-semibold">Plan</label><select id="ffClientPlan" class="form-select form-select-sm"><option value="0">No plan</option></select></div>
+    <div class="mb-3"><label class="form-label small fw-semibold">Notes</label><textarea id="ffClientNotes" class="form-control form-control-sm" rows="2"></textarea></div>
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="ffCloseClientModal()">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="ffSaveClient()">Save Client</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modern alert (OK only) -->
+<div id="ffAlertModal" class="modal-overlay" style="display:none;z-index:9996;">
+  <div class="modal-card" style="max-width:440px;">
+    <h3 id="ffAlertTitle" style="margin-bottom:8px;">Notice</h3>
+    <p id="ffAlertMsg" class="text-muted mb-3" style="font-size:14px;white-space:pre-wrap;"></p>
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-primary btn-sm" id="ffAlertOk" onclick="ffCloseAlert()">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic confirm -->
+<div id="ffConfirmModal" class="modal-overlay" style="display:none;z-index:9995;">
+  <div class="modal-card" style="max-width:440px;">
+    <h3 id="ffConfirmTitle" style="margin-bottom:8px;">Confirm</h3>
+    <p id="ffConfirmMsg" class="text-muted mb-3" style="font-size:14px;white-space:pre-wrap;"></p>
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="ffConfirmCancel" onclick="ffCloseConfirm()">Cancel</button>
+      <button type="button" class="btn btn-danger btn-sm" id="ffConfirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic multi-field prompt modal -->
+<div id="ffPromptModal" class="modal-overlay" style="display:none;z-index:9994;">
+  <div class="modal-card" style="max-width:440px;">
+    <h3 id="ffPromptTitle" style="margin-bottom:12px;">Input</h3>
+    <div class="mb-2">
+      <label class="form-label small fw-semibold" id="ffPromptLabel1">Value</label>
+      <input id="ffPromptInput1" class="form-control form-control-sm" autocomplete="off">
+    </div>
+    <div class="mb-2" id="ffPromptRow2" style="display:none;">
+      <label class="form-label small fw-semibold" id="ffPromptLabel2">Value 2</label>
+      <input id="ffPromptInput2" class="form-control form-control-sm" autocomplete="off">
+    </div>
+    <div class="mb-3" id="ffPromptRow3" style="display:none;">
+      <label class="form-label small fw-semibold" id="ffPromptLabel3">Value 3</label>
+      <input id="ffPromptInput3" class="form-control form-control-sm" autocomplete="off">
+    </div>
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="ffClosePrompt()">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" id="ffPromptOk">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="pricingHubSection" class="hidden" aria-hidden="true"></div>
+
+<div id="operatorsSection" class="hidden">
+  <h3 class="section-title mb-3">Operators (RBAC)</h3>
+  <div class="card shadow-sm border-0 mb-3">
+    <div class="card-header card-header-custom">
+      <h5 class="card-header-title mb-0">Role permissions</h5>
+      <div class="card-header-actions d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="ffResetRolePerms()">Reset defaults</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="ffSaveRolePerms()">Save permissions</button>
+      </div>
+    </div>
+    <div class="card-body table-responsive p-0">
+      <table class="table table-sm mb-0 ff-even-table align-middle" id="ffRolePermTable">
+        <thead>
+          <tr>
+            <th>Permission</th>
+            <th class="text-center">Owner</th>
+            <th class="text-center">Admin</th>
+            <th class="text-center">Staff</th>
+            <th class="text-center">Viewer</th>
+          </tr>
+        </thead>
+        <tbody id="ffRolePermBody">
+          <tr><td colspan="5" class="text-muted text-center py-3">Loading…</td></tr>
+        </tbody>
+      </table>
+      <p class="text-muted small px-3 py-2 mb-0">Owner always keeps full access. Changes apply to which roles may use those areas in the admin console.</p>
+    </div>
+  </div>
+  <div class="card shadow-sm border-0 mb-3">
+    <div class="card-header card-header-custom">
+      <h5 class="card-header-title mb-0">Admin users</h5>
+    </div>
+    <div class="card-body">
+      <div class="row g-2 mb-3">
+        <div class="col-md-3"><input id="ffNewUser" class="form-control form-control-sm" placeholder="Username"></div>
+        <div class="col-md-3"><input id="ffNewPass" type="password" class="form-control form-control-sm" placeholder="Password"></div>
+        <div class="col-md-2"><select id="ffNewRole" class="form-select form-select-sm">
+          <option value="staff">Staff</option>
+          <option value="admin">Admin</option>
+          <option value="viewer">Viewer</option>
+          <option value="owner">Owner</option>
+        </select></div>
+        <div class="col-md-2"><button class="btn btn-primary btn-sm w-100" onclick="ffCreateUser()">Add</button></div>
+      </div>
+      <div class="table-responsive p-0">
+        <table class="table table-sm mb-0"><thead><tr><th>User</th><th>Role</th><th></th></tr></thead><tbody id="ffUsersTable"></tbody></table>
+      </div>
+    </div>
+  </div>
+  <div class="card shadow-sm border-0"><div class="card-header card-header-custom"><h5 class="card-header-title mb-0">Audit log</h5></div>
+    <div class="card-body"><pre id="ffAuditLog" class="small mb-0" style="max-height:240px;overflow:auto;white-space:pre-wrap;"></pre></div>
+  </div>
+</div>
+
+<div id="reportsSection" class="hidden">
+  <h3 class="section-title mb-3">Reports</h3>
+  <div class="d-flex gap-2 mb-3">
+    <button class="btn btn-outline-secondary btn-sm" onclick="ffLoadReport('day')">Today</button>
+    <button class="btn btn-outline-secondary btn-sm" onclick="ffLoadReport('week')">Week</button>
+    <button class="btn btn-outline-secondary btn-sm" onclick="ffLoadReport('month')">Month</button>
+    <button class="btn btn-primary btn-sm" onclick="ffPrintReport()">Print / Save</button>
+  </div>
+  <div class="card shadow-sm border-0"><div class="card-body" id="ffReportBody"><p class="text-muted">Select a period</p></div></div>
+  <div class="card shadow-sm border-0 mt-3"><div class="card-header card-header-custom"><h5 class="card-header-title mb-0">Sales by Sub Vendo</h5></div>
+    <div class="card-body table-responsive"><table class="table"><thead><tr><th>Sub Vendo ID</th><th>Amount</th><th>Tx</th><th>Coins</th></tr></thead>
+    <tbody id="ffVendoSales"></tbody></table></div>
+  </div>
+</div>
+
+</div> <!-- flex-grow-1 content area -->
+</div> <!-- main-column -->
+
+    <script src="./ui-preview.js?v=dev-1789510318974"></script>
+    <script src="/admin.js?v=dev-1789510318974"></script>
+    <script src="/js/portal-live-preview.js?v=dev-1789510318974"></script>
+    <script src="/admin-ext.js?v=dev-1789510318974"></script>
+</div> <!-- adminPanel -->
+</body>
+</html>

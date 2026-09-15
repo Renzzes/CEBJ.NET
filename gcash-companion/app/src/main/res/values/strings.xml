@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KonekSik GCash</string>
+    <string name="listening_on">Listening for GCash payments</string>
+    <string name="listening_off">Listening paused</string>
+    <string name="setup_title">Setup</string>
+    <string name="home_title">Status</string>
+    <string name="perm_title">Permissions</string>
+    <string name="secret_hint">Router companion secret</string>
+    <string name="router_url_hint">http://10.0.0.1</string>
+    <string name="import_pool">Import pool JSON</string>
+    <string name="save_setup">Save setup</string>
+    <string name="open_notif_access">Open notification access</string>
+    <string name="request_sms">Allow SMS</string>
+    <string name="battery_opt">Disable battery optimization</string>
+    <string name="sms_template">Your KonekSik-Fi WiFi code: %1$s. Enter it in Wifi Pass on the portal.</string>
+</resources>

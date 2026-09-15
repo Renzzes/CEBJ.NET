@@ -1,0 +1,5 @@
+Place your coinslot firmware binary here as `coinslot.bin`
+(or change firmware_path in config.json).
+
+Current FastFi coinslot source lives in:
+EXTRACTED-OPENWRT-FASTFI-V2.5.1/rootfs/fastfi-coinslot-lanbase/

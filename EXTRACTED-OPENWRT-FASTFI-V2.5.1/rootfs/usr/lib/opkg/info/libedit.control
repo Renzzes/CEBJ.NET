@@ -1,0 +1,13 @@
+Package: libedit
+Version: 20250104.3.1-r1
+Depends: libc, libncurses6
+Source: feeds/packages/libs/libedit
+SourceName: libedit
+License: BSD-3-Clause
+Section: libs
+SourceDateEpoch: 1787150268
+URL: http://thrysoee.dk/editline/
+Maintainer: Daniel Salzman <daniel.salzman@nic.cz>
+Architecture: mipsel_24kc
+Installed-Size: 204800
+Description:  Generic line editing, history, and tokenization functions similar to GNU Readline.

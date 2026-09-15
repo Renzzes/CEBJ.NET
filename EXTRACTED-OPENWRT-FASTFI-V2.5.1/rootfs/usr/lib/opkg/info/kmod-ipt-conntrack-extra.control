@@ -1,0 +1,19 @@
+Package: kmod-ipt-conntrack-extra
+Version: 6.6.141-r1
+Depends: kernel (=6.6.141~f31f6f85a36836e510d64a18a9a5f1bf-r1), kmod-nf-conncount, kmod-ipt-core, kmod-ipt-conntrack
+Source: feeds/base/kernel/linux
+SourceName: kernel
+License: GPL-2.0-only
+LicenseFiles: COPYING
+Section: kernel
+SourceDateEpoch: 1779897308
+CPE-ID: cpe:/o:linux:linux_kernel
+Architecture: mipsel_24kc
+Installed-Size: 40960
+Description:  Netfilter (IPv4) extra kernel modules for connection tracking
+ Includes:
+ - connbytes
+ - connmark/CONNMARK
+ - conntrack
+ - helper
+ - recent

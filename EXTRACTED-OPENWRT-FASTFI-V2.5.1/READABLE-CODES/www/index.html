@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#f0f2f5">
+    <meta name="description" content="FastFi WiFi Vendo — Insert coin or redeem a voucher to connect.">
+    <!-- devtools guard (light) — operator bypass: append ?ddtk=fastfi-admin -->
+    <script>window.FASTFI_DDT_MODE='portal';</script>
+    <script src="./lib/disable-devtool.min.js?v=0.3.9"></script>
+    <script src="./lib/devtool-guard.js?v=1"></script>
+    <!-- ES5 polyfills for legacy Android WebViews (Android 5-9): fetch,
+         URLSearchParams, Object.values, padStart, Promise.finally, includes,
+         closest. Must load before any script that uses them (the license check
+         below and bootstrap.js). No-op on modern browsers. -->
+    <script src="./lib/es5-polyfills.js?v=1"></script>
+    <link rel="stylesheet" href="./css/bootstrap.min.css">
+    <link rel="stylesheet" href="./css/portal.css?v=2.8">
+    <link rel="stylesheet" href="./toastr/toastr.min.css">
+    <link rel="shortcut icon" href="./image/fastfi_logo.png" type="image/x-icon">
+    <script src="./icons.js?v=18"></script>
+    <title>FastFi Portal</title>
+    
+    <script>
+    // Asynchronous License Enforcement
+    (function() {
+        fetch('/cgi-bin/api?action=device_status')
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.status === "inactive" || data.status === "revoked") {
+                    window.location.href = "license.html";
+                }
+            })
+            .catch(function (e) { console.error("License check failed", e); });
+    })();
+    </script>
+</head>
+
+<body>
+
+    <!-- No-JS fallback for Smart TVs / browsers without JavaScript.
+         JS clients ignore <noscript>; a JS-less device lands here and can
+         redeem a voucher or resume paused time via plain HTML forms. The
+         server resolves the client MAC from the request IP, so no JS needed. -->
+    <noscript>
+    <div style="background:#0f172a;color:#f8fafc;font-family:sans-serif;text-align:center;padding:40px;margin:0;min-height:100vh">
+        <h2 style="color:#3b82f6">FastFi WiFi</h2>
+        <p>Your browser does not support JavaScript. You can still connect below.</p>
+        <form action="/cgi-bin/api" method="get" style="margin:20px auto;max-width:420px">
+            <input type="hidden" name="action" value="classic">
+            <input type="hidden" name="mode" value="voucher">
+            <input type="text" name="code" placeholder="Enter voucher code" required style="font-size:18px;padding:12px;width:70%;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#fff">
+            <button type="submit" style="font-size:18px;padding:12px 24px;margin-top:12px;border-radius:6px;border:none;background:#3b82f6;color:#fff;cursor:pointer">Go Online</button>
+        </form>
+        <form action="/cgi-bin/api" method="get" style="margin:15px">
+            <input type="hidden" name="action" value="classic">
+            <input type="hidden" name="mode" value="resume">
+            <button type="submit" style="font-size:16px;padding:10px 20px;border-radius:6px;border:1px solid #3b82f6;background:transparent;color:#3b82f6;cursor:pointer">Resume my paused time</button>
+        </form>
+        <form action="/cgi-bin/api" method="get" style="margin:15px">
+            <input type="hidden" name="action" value="classic">
+            <input type="hidden" name="mode" value="online">
+            <button type="submit" style="font-size:16px;padding:10px 20px;border-radius:6px;border:1px solid #334155;background:transparent;color:#94a3b8;cursor:pointer">Reconnect / can't browse</button>
+        </form>
+    </div>
+    </noscript>
+
+    <div class="loaders" id="loaders">
+        <h2>Loading Portal...</h2>
+        <div id="debugLog" style="font-size: 10px; color: #888; margin-top: 10px; font-family: monospace;"></div>
+        <button id="forceOpenBtn" style="margin-top: 20px; padding: 10px; background: #444; color: #fff; border: none; border-radius: 5px; display: none;">Force Open Portal</button>
+    </div>
+
+    <script>
+        // Diagnostic Logging
+        function log(msg) {
+            var logEl = document.getElementById('debugLog');
+            if (logEl) logEl.innerHTML += '<div>> ' + msg + '</div>';
+            console.log(msg);
+        }
+
+        window.onerror = function(msg, url, line) {
+            log('ERROR: ' + msg + ' (line ' + line + ')');
+        };
+
+        // Show "Force Open" button after 8 seconds
+        setTimeout(function () {
+            var btn = document.getElementById('forceOpenBtn');
+            if (btn) btn.style.display = 'block';
+            log('Initialization taking too long...');
+        }, 8000);
+
+        document.getElementById('forceOpenBtn').onclick = function() {
+            hideloaders();
+        };
+    </script>
+
+    <div class="container" id="mainContainer">
+        <div class="header">
+            <img src="./image/banner.jpg" alt="Banner" class="banner" id="bannerPreview">
+        </div>
+
+        <div class="text-banner">
+            <div class="scroll-text" id="bannerText">Connecting seamlessly...</div>
+        </div>
+
+        <div class="content" id="content" style="display:flex;">
+            <h1 id="clientStats" class="disconnected">DISCONNECTED</h1>
+
+            <div class="device-info-card">
+                <div class="device-row" style="justify-content: center; gap: 8px;">
+                    <span style="font-size: 11px;">MAC Address: <strong id="macAddress">---</strong> <span style="opacity:0.5; margin:0 4px;">||</span> IP Address: <strong id="ipAddress">---</strong></span>
+                </div>
+
+                <div class="device-row" id="displayDataRemaining" style="display:none;">
+                    <span>Data Allocation</span>
+                    <span><strong id="dataRemaining">Unli</strong> <span style="opacity:0.5; margin:0 4px;">/</span> <strong id="dataAllocation">Unli</strong></span>
+                </div>
+                <div class="device-row" id="displayPausedLimit">
+                    <span>Pause Credits</span>
+                    <strong id="pausedLimit">0</strong>
+                </div>
+            </div>
+
+            <h2 id="deviceTime" class="Timer">
+                <span class="number" id="daysNum">00</span>
+                <span class="text" id="daysText">D</span>
+
+                <span class="number" id="hoursNum">00</span>
+                <span class="text" id="hoursText">H</span>
+
+                <span class="number" id="minutesNum">00</span>
+                <span class="text" id="minutesText">M</span>
+
+                <span class="number" id="secondsNum">00</span>
+                <span class="text" id="secondsText">S</span>
+            </h2>
+            <h2 id="noTimeAlert" style="display:none; color: #ef4444; font-size: 24px; font-weight: bold; margin: 30px 0; letter-spacing: 2px;">ZERO TIME LEFT</h2>
+
+            <button class="btn" id="PausedBTN" style="display:none;"><i data-icon="pause-circle" data-size="18"></i> Pause Time</button>
+            <div style="display: flex; gap: 10px; width: 100%;">
+                <button class="btn" id="BuyTimeBTN" style="display:flex; flex: 1; justify-content: center;"><i data-icon="clock" data-size="18"></i> Insert Coin</button>
+                <button class="btn" id="BuyDataBTN" style="display:flex; flex: 1; justify-content: center;"><i data-icon="database" data-size="18"></i> Buy Data</button>
+            </div>
+
+            <div class="small-btn-group" style="margin-top: 10px;">
+                <button id="RatesBTN" class="wifi-small-btn"><i data-icon="list" data-size="16"></i> View Rates</button>
+                <button id="VoucherSmallBTN" class="wifi-small-btn"><i data-icon="ticket" data-size="16"></i> Wifi Pass</button>
+                <button id="GcashBTN" class="wifi-small-btn" style="display:none;"><i data-icon="smartphone" data-size="16"></i> GCash</button>
+            </div>
+
+        </div>
+
+        <div class="insertCoin" id="insertCoin" style="display:none;">
+            <h2 class="coins" id="coinsInserted">0</h2>
+            <p style="margin-bottom: 10px;">Credits Inserted</p>
+            
+            <h3 id="equivTime" style="color:#10b981; font-size: 32px; font-weight: bold; margin: 10px 0;">00:00:00:00</h3>
+            <p style="font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px;">Equivalent Time</p>
+
+            <div class="device-info-card">
+
+
+                <div class="device-row" id="insertDataLimit" style="display:none;">
+                    <span>Data Limit</span>
+                    <strong id="dataLimit">Unli</strong>
+                </div>
+                <div class="device-row" id="insertValidity" style="display:none;">
+                    <span>Expiration</span>
+                    <strong id="validityLimit">---</strong>
+                </div>
+                <div class="device-row" id="insertPausedLimit">
+                    <span>Pause Limit</span>
+                    <strong id="pauseCredits">0</strong>
+                </div>
+            </div>
+
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                    <span id="progressLabel">Saving Coin...</span>
+                </div>
+            </div>
+
+            <button class="doneInsert" id="DoneBTN"><i data-icon="wifi" data-size="16"></i> Go Online</button>
+            <button class="cancelInsert" id="CancelInsertBTN"><i data-icon="x" data-size="16"></i> Cancel</button>
+        </div>
+
+        <div class="slotSelect" id="slotSelect" style="display:none;">
+            <h2><i data-icon="cpu" data-size="20"></i> Select Coinslot</h2>
+            <p class="slot-info">Choose which hardware coinslot to use</p>
+            <div id="slotList" class="slot-list"></div>
+            <button class="closeSlot" id="closeSlot">Cancel</button>
+        </div>
+
+        <div class="viewRates" id="viewRates" style="display:none;">
+            <div class="table-responsive"><table class="table table-hover table-striped align-middle mt-3 styled-table">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Price</th>
+                        <th>Time</th>
+                        <th>Data</th>
+                        <th>Pause</th>
+                    </tr>
+                </thead>
+                <tbody id="ratesTable"></tbody>
+            </table></div>
+
+            <button class="closeRates" id="closeRates">Close</button>
+        </div>
+
+        <div class="applyVoucher" id="applyVoucher" style="display:none;">
+            <label for="voucherInput">Redeem Voucher</label>
+            <input type="text" class="form-control" id="voucherInput" placeholder="Enter code here">
+
+            <div class="group">
+                <button id="voucherCancel">Cancel</button>
+                <button id="voucherSubmit">Submit Code</button>
+            </div>
+        </div>
+
+        <div class="applyVoucher" id="gcashPay" style="display:none; flex-direction:column; align-items:center; gap:10px;">
+            <h2 style="margin:0;"><i data-icon="smartphone" data-size="20"></i> Pay with GCash</h2>
+            <p style="font-size:13px; color:#94a3b8; text-align:center; margin:0;">Enter your mobile number, then tap a package. Send the exact amount to the GCash number below — your WiFi code will be texted to your mobile.</p>
+            <img id="gcashQrImg" alt="GCash QR" style="max-width:200px; max-height:200px; border-radius:10px; display:none;">
+            <div style="font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:1px;">Send to GCash</div>
+            <div id="gcashPayNumber" style="font-size:20px; font-weight:bold; letter-spacing:1px;">—</div>
+
+            <!-- Step 1: enter mobile + tap a package -->
+            <div id="gcashOrderForm" style="width:100%; display:flex; flex-direction:column; align-items:center; gap:8px;">
+                <input id="gcashMobile" inputmode="numeric" maxlength="11" placeholder="09XXXXXXXXX" style="width:80%; max-width:240px; text-align:center; font-size:16px; letter-spacing:1px; padding:8px; border-radius:8px; border:1px solid #334155; background:#0f172a; color:#fff;">
+                <div style="font-size:11px; color:#94a3b8;">We'll text your WiFi code to this number.</div>
+                <div class="table-responsive" style="width:100%;"><table class="table table-hover align-middle mt-2 styled-table" style="font-size:13px;">
+                    <thead class="table-dark"><tr><th>Tap to pay</th><th>Time</th></tr></thead>
+                    <tbody id="gcashRatesTable"></tbody>
+                </table></div>
+            </div>
+
+            <!-- Step 2: send-confirmation -->
+            <div id="gcashOrderSend" style="width:100%; display:none; flex-direction:column; align-items:center; gap:8px;">
+                <!-- GCash app access countdown (2 min). Hidden until the
+                     grant succeeds; if the grant is denied, #gcashFreewindowDenied shows
+                     the reason instead and the customer can still pay on mobile data. -->
+                <div id="gcashFreewindowCountdown" style="display:none; width:100%; background:#1e293b; border-radius:10px; padding:12px 16px; text-align:center;">
+                    <p style="margin:0; font-size:0.8rem; color:#94a3b8;">GCash app access active — open GCash and send before this ends</p>
+                    <p id="gcashFreewindowCountdownText" style="margin:4px 0 0; font-size:1.4rem; font-weight:700; color:#10b981; letter-spacing:1px;">02:00</p>
+                </div>
+                <div id="gcashFreewindowDenied" style="display:none; width:100%; background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:10px 14px; color:#92400e; font-size:12px; text-align:center;"></div>
+                <div style="font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:1px;">Send EXACTLY</div>
+                <div id="gcashSendAmount" style="font-size:30px; font-weight:bold; letter-spacing:1px;">₱—</div>
+                <div id="gcashSendNote" style="font-size:13px; color:#cbd5e1; text-align:center;">Your WiFi code will be texted to —</div>
+                <button id="gcashOpenAppBtn" type="button" class="btn" style="width:100%;" onclick="openGcashApp()"><i data-icon="smartphone" data-size="16"></i> Open GCash App to Pay</button>
+                <div style="font-size:11px; color:#94a3b8; text-align:center;">Tries to open the GCash app. Many phones show this portal in a restricted &quot;sign-in&quot; browser that can't open other apps — if GCash doesn't open, just open the GCash app yourself, send the exact amount above to the operator's GCash number (or scan the QR), then come back here.</div>
+                <div id="gcashOpenFallback" style="width:100%; display:none; flex-direction:column; align-items:center; gap:8px; margin-top:6px; padding:12px; border:1px solid #fde68a; background:#fffbeb; border-radius:10px; color:#92400e; font-size:13px; text-align:center;">
+                    <strong style="color:#b45309;">GCash didn't open? No problem.</strong>
+                    Open the <strong>GCash app</strong> yourself, send the exact amount shown above to the operator's GCash number (or scan the QR), then come back here.
+                    <button class="btn" style="width:100%; margin-top:4px;" onclick="changeView('voucher')"><i data-icon="ticket" data-size="16"></i> I'm back — Enter Wifi Pass</button>
+                </div>
+                <button class="btn" style="width:100%;" onclick="changeView('voucher')"><i data-icon="ticket" data-size="16"></i> I have my code — Enter Wifi Pass</button>
+                <button class="closeRates" type="button" onclick="resetGcashOrder()">Pick another package</button>
+            </div>
+
+            <button class="closeRates" id="closeGcash">Back</button>
+        </div>
+
+        <div class="footer">
+            <p>Powered by <a href="#" id="poweredBy">FastFi Systems</a></p>
+        </div>
+    </div>
+
+    <script src="./jquery/jquery.min.js"></script>
+    <script src="./toastr/toastr.min.js"></script>
+    <script src="./fingerprint.js"></script>
+
+    <script>
+        window.toggleInsert = typeof window.toggleInsert !== 'undefined' ? window.toggleInsert : 1;
+        window.toggleBuyData = typeof window.toggleBuyData !== 'undefined' ? window.toggleBuyData : 1;
+
+        window.addEventListener("load", function () {
+            var banner = document.getElementById("bannerPreview");
+            banner.src = "./image/banner.jpg?" + Date.now();
+        });
+
+        function changeView(type) {
+            var view;
+            var content = document.getElementById("content");
+
+            switch (type) {
+                case "insert": view = document.getElementById("insertCoin"); break;
+                case "rates": view = document.getElementById("viewRates"); break;
+                case "voucher": view = document.getElementById("applyVoucher"); break;
+                case "gcash": view = document.getElementById("gcashPay");
+                    if (typeof window.resetGcashOrder === "function") window.resetGcashOrder();
+                    break;
+                default: return;
+            }
+
+
+            content.style.opacity = 0;
+            setTimeout(function () {
+                content.style.display = "none";
+                view.style.display = "flex";
+                view.style.opacity = 0;
+                setTimeout(function () { view.style.opacity = 1; }, 50);
+            }, 200);
+        }
+
+        function backToMain() {
+            var insert = document.getElementById("insertCoin");
+            var rates = document.getElementById("viewRates");
+            var voucher = document.getElementById("applyVoucher");
+            var gcash = document.getElementById("gcashPay");
+            var content = document.getElementById("content");
+
+            insert.style.opacity = 0;
+            rates.style.opacity = 0;
+            voucher.style.opacity = 0;
+            if (gcash) gcash.style.opacity = 0;
+
+
+            setTimeout(function () {
+                insert.style.display = "none";
+                rates.style.display = "none";
+                voucher.style.display = "none";
+                if (gcash) gcash.style.display = "none";
+
+
+                content.style.display = "flex";
+                content.style.opacity = 0;
+                setTimeout(function () { content.style.opacity = 1; }, 50);
+            }, 200);
+        }
+
+        function hideloaders() {
+            var loaders = document.getElementById("loaders");
+            loaders.style.opacity = 0;
+            setTimeout(function () {
+                loaders.style.display = "none";
+            }, 300);
+        }
+
+        // WAN Health Check
+        setInterval(function () {
+            fetch('/cgi-bin/api?action=internet_status')
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    var btnTime = document.getElementById("BuyTimeBTN");
+                    var btnData = document.getElementById("BuyDataBTN");
+                    var badge = document.getElementById("clientStats");
+                    var pauseBtn = document.getElementById("PausedBTN");
+
+                    var hideInsertOnNoInternet = (window.toggleInsert == 0);
+                    var isBuyDataDisabled = (window.toggleBuyData == 0);
+
+                    if (data.internet === false) {
+                        if (pauseBtn) pauseBtn.style.display = "none";
+
+                        if (btnTime) {
+                            if (hideInsertOnNoInternet) {
+                                btnTime.style.display = "none";
+                            } else {
+                                btnTime.style.display = "";
+                                if (!btnTime.hasAttribute("data-disabled")) {
+                                    btnTime.setAttribute("data-disabled", "true");
+                                    btnTime.style.opacity = "0.5";
+                                    btnTime.style.pointerEvents = "none";
+                                    btnTime.innerHTML = (window.icon ? window.icon("wifi-off", 18) : '') + " No Internet";
+                                }
+                            }
+                        }
+
+                        if (btnData) {
+                            if (hideInsertOnNoInternet || isBuyDataDisabled) {
+                                btnData.style.display = "none";
+                            } else {
+                                btnData.style.display = "";
+                                if (!btnData.hasAttribute("data-disabled")) {
+                                    btnData.setAttribute("data-disabled", "true");
+                                    btnData.style.opacity = "0.5";
+                                    btnData.style.pointerEvents = "none";
+                                    btnData.innerHTML = (window.icon ? window.icon("wifi-off", 18) : '') + " No Internet";
+                                }
+                            }
+                        }
+
+                        if (badge) {
+                            badge.dataset.wanDown = "true";
+                            if (badge.textContent !== "NO INTERNET") {
+                                badge.dataset.oldText = badge.textContent;
+                                badge.textContent = "NO INTERNET";
+                                badge.classList.remove('connected');
+                                badge.classList.add('disconnected');
+                            }
+                        }
+                    } else {
+                        if (pauseBtn && badge && badge.dataset.wanDown === "true") {
+                            // Force UI refresh on reconnection
+                            window.dispatchEvent(new CustomEvent('wan_restored'));
+                        }
+
+                        if (btnTime) {
+                            if (hideInsertOnNoInternet) {
+                                btnTime.style.display = "none";
+                            } else {
+                                btnTime.style.display = "";
+                                if (btnTime.hasAttribute("data-disabled")) {
+                                    btnTime.removeAttribute("data-disabled");
+                                    btnTime.style.opacity = "1";
+                                    btnTime.style.pointerEvents = "auto";
+                                    btnTime.innerHTML = (window.icon ? window.icon("clock", 18) : '') + " Insert Coin";
+                                }
+                            }
+                        }
+
+                        if (btnData) {
+                            if (hideInsertOnNoInternet || isBuyDataDisabled) {
+                                btnData.style.display = "none";
+                            } else {
+                                btnData.style.display = "";
+                                if (btnData.hasAttribute("data-disabled")) {
+                                    btnData.removeAttribute("data-disabled");
+                                    btnData.style.opacity = "1";
+                                    btnData.style.pointerEvents = "auto";
+                                    btnData.innerHTML = (window.icon ? window.icon("database", 18) : '') + " Buy Data";
+                                }
+                            }
+                        }
+
+                        if (badge) {
+                            badge.dataset.wanDown = "false";
+                            if (badge.textContent === "NO INTERNET") {
+                                badge.textContent = badge.dataset.oldText || "CONNECTED";
+                                if (badge.textContent === "CONNECTED") {
+                                    badge.classList.remove('disconnected');
+                                    badge.classList.add('connected');
+                                }
+                            }
+                        }
+                    }
+                })
+                .catch(function (e) {});
+        }, 5000);
+    </script>
+
+    <script src="./bootstrap.js?v=2.3.19"></script>
+    <!-- GCash captive/in-app browser guard: eject to Chrome before the GCash
+         flow when the portal is open inside a captive sign-in WebView or an
+         in-app browser (FB/IG/Line/etc.), where gcash:// and the GCash app
+         access window are unreliable. Loaded after bootstrap.js. -->
+    <script src="./portal_extra.js?v=2.1.5"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "id": "esp32_eth",
+  "name": "ESP32 Ethernet (native EMAC / ETH)",
+  "chip": "esp32",
+  "network": "native_eth",
+  "wireless": false,
+  "esptool_chip": "esp32",
+  "flash_mode": "dio",
+  "flash_freq": "40m",
+  "flash_size": "4MB",
+  "default_firmware": "firmware/esp32_eth.bin",
+  "notes": "For ESP32 boards with built-in Ethernet PHY (e.g. LAN8720). RMII pins are fixed by Espressif — do not remultiplex casually. Coin/relay are free GPIOs.",
+  "pins": {
+    "coin_primary": { "gpio": 34, "label": "GPIO34", "role": "Coin pulse (primary)" },
+    "coin_backup": { "gpio": 35, "label": "GPIO35", "role": "Coin pulse (backup)" },
+    "relay": { "gpio": 4, "label": "GPIO4", "role": "Relay" },
+    "led": { "gpio": 2, "label": "GPIO2", "role": "Status LED" },
+    "eth_mdc": { "gpio": 23, "label": "GPIO23", "role": "ETH MDC (RMII)" },
+    "eth_mdio": { "gpio": 18, "label": "GPIO18", "role": "ETH MDIO (RMII)" },
+    "eth_clk": { "gpio": 0, "label": "GPIO0", "role": "ETH CLK_IN (often 50MHz)" },
+    "eth_power": { "gpio": 16, "label": "GPIO16", "role": "ETH PHY power (board-specific)" }
+  }
+}

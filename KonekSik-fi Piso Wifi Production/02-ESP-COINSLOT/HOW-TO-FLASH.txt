@@ -1,0 +1,11 @@
+ESP coinslot + license
+----------------------
+firmware\              = board firmware bins
+Flasher-and-License\   = flash tool + license signer
+
+1. Open Flasher-and-License\START-FLASHER.bat
+2. Choose your board + COM port
+3. Browse a file from firmware\
+4. Flash + License (full provision)
+
+Do NOT skip the license step — coinslot needs it.

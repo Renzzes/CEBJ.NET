@@ -1,0 +1,2 @@
+/lib/modules/6.6.141/crypto-hw-eip93.ko
+/etc/modules.d/09-crypto-hw-eip93

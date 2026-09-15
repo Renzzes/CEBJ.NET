@@ -1,0 +1,45 @@
+# FastFi V6 Cron Jobs Template
+# Copy to /etc/crontabs/root on router deployment
+
+# Session cleanup - every hour
+0 * * * * sqlite3 /www/data/sessions.db "DELETE FROM sessions WHERE active=0 AND paused=0 AND remaining<=0;"
+
+# License check - every 20 days (480 hours)
+0 */480 * * * /usr/libexec/fastfi/services/fastfi-license.sh
+
+# Heartbeat - every 1 minute
+* * * * * /usr/libexec/fastfi/jobs/fastfi-heartbeat.sh >/dev/null 2>&1
+
+# Sales report - every 1 minute
+* * * * * /usr/libexec/fastfi/services/fastfi-report.sh >/dev/null 2>&1
+
+# Database health check - every hour
+0 * * * * /usr/libexec/fastfi/services/fastfi-db-heal.sh >/dev/null 2>&1
+
+# VPN management - every 1 minute
+* * * * * /usr/libexec/fastfi/services/fastfi-vpn.sh >/dev/null 2>&1
+
+# VPN monitor - every minute
+* * * * * /usr/libexec/fastfi/jobs/fastfi-vpn-monitor.sh >/dev/null 2>&1
+
+# Autopause check - every minute
+* * * * * /usr/libexec/fastfi/jobs/fastfi-autopause.sh >/dev/null 2>&1
+
+# ESP monitor - every minute
+* * * * * /usr/libexec/fastfi/jobs/esp-monitor.sh >/dev/null 2>&1
+
+# OTA auto-update - daily at 3:00 AM
+# Checks GitHub for new release, downloads, verifies, and applies automatically
+0 3 * * * /usr/libexec/fastfi/core/fastfi-ota.sh auto >> /tmp/ota-cron.log 2>&1
+
+# Watchdog (Lua) - every minute
+* * * * * /usr/bin/env lua /usr/libexec/fastfi/jobs/fastfi-watchdog.lua >/dev/null 2>&1
+
+# FastFi Shield - re-resolve Starlink IPs every 6h (off-peak minute)
+# Repopulates the nft fastfi_starlink_ips fallback set. No-op when Starlink is off.
+7 */6 * * * /usr/bin/env lua /usr/libexec/fastfi/core/fastfi-starlink-sync.lua >/dev/null 2>&1
+
+
+# NOTE: Admin device auto-renewal should be added manually if needed for debugging
+# Example (replace MAC address with actual device):
+# */5 * * * * sqlite3 /www/data/sessions.db "UPDATE sessions SET session_end=<timestamp>, active=1, remaining=86313600 WHERE mac_address='<MAC_ADDRESS>';" && ndsctl auth <MAC_ADDRESS> >/dev/null 2>&1

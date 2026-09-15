@@ -1,0 +1,52 @@
+#!/bin/sh
+# FastFi V6 — one-time migration: force br-lan to 10.0.0.1/24.
+#
+# Targets units that ALREADY booted on a firmware whose first-boot STEP 3
+# (in 99-fastfi-setup) skipped the portal-IP change. On 25.12.x, config_generate
+# writes the lan address as a CIDR list
+#     list ipaddr '192.168.1.1/24'
+# instead of the 24.10.x scalar
+#     option ipaddr '192.168.1.1' + option netmask '255.255.255.0'
+# The old STEP 3 equality check `uci get network.lan.ipaddr = "192.168.1.1"`
+# was FALSE against "192.168.1.1/24", so br-lan stayed at the OpenWrt default
+# 192.168.1.1 while DHCP (STEP 4) handed out 10.0.0.x — the captive portal and
+# admin panel were unreachable.
+#
+# Why a separate file (not just fixing 99): uci-defaults self-delete (overlay
+# whiteout) on exit 0, and sysupgrade preserves /etc/config/network + the
+# overlay. So on a unit that already booted, the fixed 99-fastfi-setup is
+# whited-out and a plain sysupgrade would NOT re-run it. This file has a
+# distinct name so it is NOT whited-out and DOES run on the next boot after a
+# plain sysupgrade, healing already-deployed units without a factory reset.
+#
+# Idempotent + condition-guarded: no-op when br-lan is already non-default
+# (10.0.0.1 or any operator-set IP), so the 24.10.x boards and correct EDUPs
+# are untouched. Runs once (self-deletes on exit 0).
+
+_CUR_LAN_IP=$(uci -q get network.lan.ipaddr 2>/dev/null)
+# uci get on a list returns members space/newline-separated; strip the CIDR
+# prefix and whitespace to compare just the address.
+_CUR_BARE=$(printf '%s' "$_CUR_LAN_IP" | tr -d ' \n' | sed 's|/.*||')
+
+# Only heal the OpenWrt default (192.168.1.1 in any form). Leave 10.0.0.1 and any
+# custom operator IP alone.
+if [ -z "$_CUR_BARE" ] || [ "$_CUR_BARE" = "192.168.1.1" ]; then
+    uci set network.lan.proto='static'
+    uci -q delete network.lan.ipaddr
+    case "$_CUR_LAN_IP" in
+        */*)   # 25.12.x CIDR-list form
+            uci -q delete network.lan.netmask 2>/dev/null
+            uci add_list network.lan.ipaddr='10.0.0.1/24'
+            ;;
+        *)     # 24.10.x scalar form
+            uci set network.lan.ipaddr='10.0.0.1'
+            uci set network.lan.netmask='255.255.255.0'
+            ;;
+    esac
+    uci commit network
+    echo "[FastFi migrate] br-lan was '${_CUR_BARE:-unset}' -> 10.0.0.1/24."
+else
+    echo "[FastFi migrate] br-lan already at $_CUR_BARE — no change."
+fi
+
+exit 0

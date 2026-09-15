@@ -1,0 +1,13 @@
+Built: Tue 09/08/2026 13:42:08.81
+
+[1 Ruijie]
+NOT BUILT YET — double-click BUILD-PRODUCTION.bat (needs WSL Ubuntu).
+
+[2 ESP firmware]
+SKIPPED - install PlatformIO
+
+[3 Flasher + License]
+OK - flasher+license packed, firmware bins linked: 0
+
+[4 GCash APK]
+SKIPPED - build APK in Android Studio then re-run

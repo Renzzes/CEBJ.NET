@@ -1,0 +1,18 @@
+# Normalise all text files to LF on commit + checkout.
+# Firmware shell/lua/config scripts run on OpenWrt (ash) — CRLF breaks them.
+* text=auto eol=lf
+
+# Explicitly mark binaries so git never tries to convert them.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg binary
+*.mp3 binary
+*.wav binary
+*.gz binary
+*.zst binary
+*.tar binary
+*.bin binary
+*.elf binary
+*.img binary
