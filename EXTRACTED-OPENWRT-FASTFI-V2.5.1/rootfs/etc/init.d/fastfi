@@ -34,12 +34,31 @@ start_service() {
     procd_set_param respawn_threshold 5
     procd_set_param respawn_timeout 2
     procd_close_instance
+
+    # 2:00 PM OTA cron. The job itself no-ops unless the admin toggle is on.
+    /usr/libexec/fastfi/core/fastfi-ota-schedule.sh install-cron >/dev/null 2>&1 || true
+    ( /usr/libexec/fastfi/core/fastfi-ota-schedule.sh >/dev/null 2>&1 ) &
+
+    # After a tiny bootstrap OTA (tight overlay), finish update-full.tar.gz.
+    if [ -f /etc/fastfi/ota_pending_full ]; then
+        ( sleep 20; /usr/libexec/fastfi/core/fastfi-ota.sh continue-full >/tmp/ota-continue-full.log 2>&1 ) &
+    fi
+
+    # Event-driven auto-pause: hostapd_cli action on STA connect/disconnect
+    procd_open_instance
+    procd_set_param command /usr/libexec/fastfi/jobs/fastfi-hostapd-autopause.sh
+    procd_set_param respawn
+    procd_set_param respawn_threshold 5
+    procd_set_param respawn_timeout 2
+    procd_close_instance
 }
 
 stop_service() {
     killall captive-trigger.sh 2>/dev/null
     killall core-loop.sh 2>/dev/null
     killall fastfi-quota-sync.lua 2>/dev/null
+    killall fastfi-hostapd-autopause.sh 2>/dev/null
+    killall hostapd_cli 2>/dev/null
 }
 
 restart() {

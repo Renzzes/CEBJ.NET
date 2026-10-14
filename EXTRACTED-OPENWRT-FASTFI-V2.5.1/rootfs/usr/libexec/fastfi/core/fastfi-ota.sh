@@ -1,4 +1,4 @@
-﻿#!/bin/sh
+#!/bin/sh
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # KonekSik-fi / CEBJ.NET â€” Production OTA Update System
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -32,6 +32,10 @@ API_URL="https://api.github.com/repos/${OWNER}/${REPO}/releases/${CHANNEL}"
 # Public releases need no token. Optional: export GITHUB_TOKEN on the router
 # if the repo is ever made private (never hardcode secrets in this file).
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+# Private repo: a token saved by Admin → OTA (never printed, never in the image).
+if [ -z "$GITHUB_TOKEN" ] && [ -r /etc/fastfi/github_token ]; then
+    GITHUB_TOKEN=$(tr -d ' \t\r\n' < /etc/fastfi/github_token 2>/dev/null || true)
+fi
 
 VERSION_FILE="/www/version.txt"
 LOG_FILE="/tmp/fw_progress.log"
@@ -64,6 +68,9 @@ ROLLBACK_PENDING="/etc/fastfi/ota_pending"
 # .tar.gz cp would grow the overlay by ~the full code size â€” select the .bin
 # instead when free space is short. See select_update_asset().
 OVERLAY_MARKER="/etc/fastfi/.ota_overlay_code"
+# Set by a tiny bootstrap OTA so the next boot pulls update-full.tar.gz with the
+# new OTA engine (tight 16 MB overlays cannot fit a first full copy-up).
+OVERLAY_PENDING_FULL="/etc/fastfi/ota_pending_full"
 
 # arm_rollback <mode>  (mode = "config": config+data snapshot only â€” used by
 # both the .bin sysupgrade and the .tar.gz overlay OTA paths, so the 16 MB
@@ -75,6 +82,17 @@ arm_rollback() {
     # reboot â€” leaving the operator stuck ("router never reboots"). A missing
     # rollback marker is harmless; an aborted apply is not.
     { mkdir -p /etc/fastfi 2>/dev/null || true; }
+    # Reclaim first. On a 168 KB-free box, creating a backup makes the space
+    # gate fail even when the update itself would fit after cleanup.
+    overlay_reclaim >/dev/null 2>&1 || true
+    local free_now
+    free_now="$(overlay_free_kb)"
+    if [ "${free_now:-0}" -gt 0 ] && [ "$((free_now))" -lt 256 ]; then
+        log "WARNING: overlay only ${free_now}KB free — skipping pre-OTA backup so the update can proceed."
+        { printf 'BACKUP=\nVERSION=%s\n' "$(get_current_version)" > "$ROLLBACK_PENDING" 2>/dev/null || true; }
+        chmod 600 "$ROLLBACK_PENDING" 2>/dev/null || true
+        return 0
+    fi
     log "Creating pre-OTA backup (mode=${mode}) for rollback safety..."
     local bk rc=0
     # The backup is a SAFETY NET, not a prerequisite. A failed backup
@@ -307,11 +325,15 @@ get_latest_release() {
         die 2 "Empty response from GitHub API. Check internet and token."
     fi
 
-    # Check for API errors
-    if echo "$json" | grep -q '"message"'; then
+    # A real release has tag_name. Error JSON is {"message":"Not Found",...}
+    # and must not be confused with the word "message" inside release notes.
+    if ! echo "$json" | grep -q '"tag_name"'; then
         local errmsg
         errmsg="$(echo "$json" | grep -o '"message": *"[^"]*"' | head -1 | cut -d'"' -f4)"
-        die 2 "GitHub API error: ${errmsg}"
+        if [ "$errmsg" = "Not Found" ]; then
+            die 2 "GitHub API error: Not Found. No release was found on Renzzes/CEBJ.NET."
+        fi
+        die 2 "GitHub API error: ${errmsg:-no release found}"
     fi
 
     # Persist for asset parsing
@@ -435,6 +457,61 @@ overlay_free_kb() {
 overlay_cpneed_kb() {
     du -sk --exclude=/www/data /www /usr/lib/lua/fastfi /usr/libexec/fastfi 2>/dev/null | \
         awk '{s+=$1} END{print s+0}'
+}
+
+# True when FastFi code already lives in the overlay upper layer (in-place cp).
+# Marker may be missing after a partial apply or manual edits; do not charge a
+# full first-copy-up when upper already holds the tree.
+overlay_code_in_upper() {
+    [ -f "$OVERLAY_MARKER" ] && return 0
+    [ -f /overlay/upper/www/admin.js ] && return 0
+    [ -f /overlay/upper/www/admin-ext.js ] && return 0
+    [ -d /overlay/upper/usr/lib/lua/fastfi/api ] && return 0
+    [ -f /overlay/upper/usr/libexec/fastfi/core/fastfi-ota.sh ] && return 0
+    return 1
+}
+
+# Drop recoverable overlay junk. Never touches /www/data licenses or rates DBs.
+overlay_reclaim() {
+    local before after
+    before="$(overlay_free_kb)"
+    [ -x "$BACKUP_SCRIPT" ] && "$BACKUP_SCRIPT" cleanup 0 >/dev/null 2>&1 || true
+    rm -f /www/data/backups/fastfi-*.tar.gz 2>/dev/null || true
+    rm -rf /tmp/_ota_extract /tmp/_ota_extract.* 2>/dev/null || true
+    # Stale OTA leftovers on overlay (if any path was redirected off tmpfs).
+    rm -rf /overlay/upper/tmp/_ota_extract 2>/dev/null || true
+    rm -f /overlay/upper/tmp/update.tar.gz /overlay/upper/tmp/update-full.tar.gz 2>/dev/null || true
+    rm -f /var/log/*.log /tmp/*.log 2>/dev/null || true
+    rm -rf /usr/lib/opkg/lists/* 2>/dev/null || true
+    rm -rf /var/opkg-lists/* 2>/dev/null || true
+    # Truncate huge rotated logs under /www/data (keep DB files).
+    find /www/data -maxdepth 2 -type f \( -name '*.log' -o -name '*-log.txt' \) \
+        -size +64k -exec rm -f {} \; 2>/dev/null || true
+    after="$(overlay_free_kb)"
+    log "Overlay reclaim: ${before:-?}KB -> ${after:-?}KB free"
+}
+
+# Copy one tree file-by-file. Remove each destination first so overlayfs does
+# not need (old + new) peak headroom when replacing an upper-layer file.
+overlay_cp_tree() {
+    local src="$1" dst="$2" f rel parent rc=0
+    [ -d "$src" ] || return 0
+    # Avoid pipeline subshell so failures propagate.
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        rel="${f#"$src"/}"
+        [ -n "$rel" ] || continue
+        parent="$(dirname "$dst/$rel")"
+        mkdir -p "$parent" 2>/dev/null || true
+        rm -f "$dst/$rel" 2>/dev/null || true
+        if ! cp -f "$f" "$dst/$rel"; then
+            rc=1
+            break
+        fi
+    done <<EOF
+$(find "$src" -type f 2>/dev/null)
+EOF
+    return "$rc"
 }
 
 # Decide which update asset this device should pull. Sets ASSET_URL/ASSET_NAME.
@@ -664,40 +741,27 @@ perform_upgrade() {
             # very in-place-overwrite case the marker is meant to greenlight.
             local cp_need_kb free_kb effective_need peak_kb
             cp_need_kb="$(du -sk "${EXTRACT_DIR}/www" "${EXTRACT_DIR}/usr/lib/lua/fastfi" "${EXTRACT_DIR}/usr/libexec/fastfi" "${EXTRACT_DIR}/etc" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
-            # Peak = the largest single file in the bundle. During `cp -r`,
-            # overlayfs copies each file up to the upper layer BEFORE
-            # overwriting it, so the momentary space above the running total is
-            # one file's size. The margin only needs to cover THAT peak â€” not a
-            # flat 1 MB. A flat 1 MB margin (v2.2.5) was so conservative it
-            # rejected a 3.7 MB-free Ruijie that genuinely fits (copy-up ~2.8 MB
-            # + 0.5 MB peak = ~3.3 MB). Measuring the real peak lets the .tar.gz
-            # apply whenever it truly fits, and only die-6s when it doesn't.
-            # BusyBox `du -k` rounds up to 4 KB blocks, so this already includes
-            # block-rounding slack; fall back to 512 KB if the find is empty.
+            # Peak = largest single file. File-by-file apply removes the dest
+            # first, so in-place updates only need ~peak free (not old+new).
             peak_kb="$(find "${EXTRACT_DIR}/www" "${EXTRACT_DIR}/usr/lib/lua/fastfi" "${EXTRACT_DIR}/usr/libexec/fastfi" "${EXTRACT_DIR}/etc" -type f -exec du -k {} \; 2>/dev/null | sort -rn | awk 'NR==1{print $1+0}')"
-            [ "${peak_kb:-0}" -gt 0 ] || peak_kb=512
+            # Empty extract dirs (bootstrap OTA) → peak 0, not a fake 512 KB floor.
+            [ "${peak_kb:-0}" -gt 0 ] || peak_kb=0
+            overlay_reclaim >/dev/null 2>&1 || true
             free_kb="$(overlay_free_kb)"
-            if [ -f "$OVERLAY_MARKER" ]; then
+            if overlay_code_in_upper; then
                 effective_need=0   # in-place overwrite, ~0 net
             else
                 effective_need="${cp_need_kb:-0}"
             fi
-            if [ "${free_kb:-0}" -gt 0 ] && [ "${effective_need:-0}" -gt 0 ] && \
+            if [ "${free_kb:-0}" -gt 0 ] && \
                [ "$((free_kb))" -lt "$((effective_need + peak_kb))" ]; then
-                log "WARNING: overlay low (free ${free_kb}KB < need ${effective_need}KB + peak ${peak_kb}KB). Dropping all backups to recover space..."
-                "$BACKUP_SCRIPT" cleanup 0 >/dev/null 2>&1 || true
+                log "WARNING: overlay low (free ${free_kb}KB < need ${effective_need}KB + peak ${peak_kb}KB). Reclaiming again..."
+                overlay_reclaim >/dev/null 2>&1 || true
                 free_kb="$(overlay_free_kb)"
             fi
-            if [ "${free_kb:-0}" -gt 0 ] && [ "${effective_need:-0}" -gt 0 ] && \
+            if [ "${free_kb:-0}" -gt 0 ] && \
                [ "$((free_kb))" -lt "$((effective_need + peak_kb))" ]; then
-                # Overlay genuinely cannot hold the .tar.gz even after dropping
-                # backups. Bail VISIBLY (exit 6 + FATAL log, no reboot) so the
-                # admin panel shows the real reason and the box stays on the
-                # working old version instead of aborting mid-cp into a
-                # franken-system. Do NOT auto-fallback to .bin here â€” the
-                # .tar.gz fits on any overlay with >= need+peak free (the common
-                # 3-4 MB Ruijie case); this die only fires when it truly can't.
-                die 6 "Insufficient overlay space for .tar.gz apply: need ~$((effective_need/1024))MB + ${peak_kb}KB peak, have $((free_kb/1024))MB free. Free up overlay space (remove old backups) or reflash the per-device .bin sysupgrade image manually."
+                die 6 "Insufficient overlay space for .tar.gz apply: need ${effective_need}KB + ${peak_kb}KB peak, have ${free_kb}KB free. Free up overlay space or flash the .bin manually."
             fi
             log "Overlay headroom OK (free ${free_kb:-?}KB, effective need ${effective_need:-?}KB, peak ${peak_kb:-?}KB, bundle ${cp_need_kb:-?}KB)."
 
@@ -719,16 +783,16 @@ perform_upgrade() {
             # Track success so we only mark the code in-overlay on a clean copy.
             local overlay_ok=1
             if [ -d "${EXTRACT_DIR}/www" ]; then
-                cp -r "${EXTRACT_DIR}/www/"* /www/ 2>>"$LOG_FILE" || { log "WARNING: copy of /www failed"; overlay_ok=0; }
+                overlay_cp_tree "${EXTRACT_DIR}/www" /www 2>>"$LOG_FILE" || { log "WARNING: copy of /www failed"; overlay_ok=0; }
             fi
             if [ -d "${EXTRACT_DIR}/usr/lib/lua/fastfi" ]; then
-                cp -r "${EXTRACT_DIR}/usr/lib/lua/fastfi/"* /usr/lib/lua/fastfi/ 2>>"$LOG_FILE" || { log "WARNING: copy of lua/fastfi failed"; overlay_ok=0; }
+                overlay_cp_tree "${EXTRACT_DIR}/usr/lib/lua/fastfi" /usr/lib/lua/fastfi 2>>"$LOG_FILE" || { log "WARNING: copy of lua/fastfi failed"; overlay_ok=0; }
             fi
             if [ -d "${EXTRACT_DIR}/usr/libexec/fastfi" ]; then
-                cp -r "${EXTRACT_DIR}/usr/libexec/fastfi/"* /usr/libexec/fastfi/ 2>>"$LOG_FILE" || { log "WARNING: copy of libexec/fastfi failed"; overlay_ok=0; }
+                overlay_cp_tree "${EXTRACT_DIR}/usr/libexec/fastfi" /usr/libexec/fastfi 2>>"$LOG_FILE" || { log "WARNING: copy of libexec/fastfi failed"; overlay_ok=0; }
             fi
             if [ -d "${EXTRACT_DIR}/etc" ]; then
-                cp -r "${EXTRACT_DIR}/etc/"* /etc/ 2>>"$LOG_FILE" || { log "WARNING: copy of /etc failed"; overlay_ok=0; }
+                overlay_cp_tree "${EXTRACT_DIR}/etc" /etc 2>>"$LOG_FILE" || { log "WARNING: copy of /etc failed"; overlay_ok=0; }
             fi
 
             # Fix execute permissions lost from Windows-generated tarballs.
@@ -784,9 +848,12 @@ perform_upgrade() {
 
             # Mark the code as living in the overlay so the next .tar.gz cp is
             # known to overwrite in place (~0 net flash growth). Only set it on
-            # a clean copy; a partial copy leaves the marker absent so the next
-            # check re-evaluates headroom (and likely routes to .bin).
-            if [ "$overlay_ok" = 1 ]; then
+            # a clean FULL-tree copy. Bootstrap OTAs ship libexec only — setting
+            # the marker there would falsely greenlight a later full copy-up.
+            if [ "$overlay_ok" = 1 ] \
+                && [ -d "${EXTRACT_DIR}/www" ] \
+                && [ -d "${EXTRACT_DIR}/usr/lib/lua/fastfi" ] \
+                && [ -d "${EXTRACT_DIR}/usr/libexec/fastfi" ]; then
                 { : > "$OVERLAY_MARKER" 2>/dev/null || true; }
             fi
 
@@ -800,6 +867,108 @@ perform_upgrade() {
     esac
 }
 
+# ── Pinned release (rollback). Metadata only until download-selected. ──
+# Tag is a GitHub release tag, never a URL and never shell.
+valid_release_tag() {
+    local tag="$1"
+    [ -n "$tag" ] || return 1
+    [ "${#tag}" -le 64 ] || return 1
+    case "$tag" in
+        *[!A-Za-z0-9._+-]*) return 1 ;;
+    esac
+    return 0
+}
+
+ota_schedule_conf() {
+    printf '%s\n' "${FASTFI_OTA_CONF:-/etc/fastfi/ota_schedule.conf}"
+}
+
+# Copy a caller-supplied fixture, or fetch the real releases API.
+# FASTFI_OTA_FAKE_* is for host tests. Unset on the router.
+load_releases_json() {
+    local dest="${TMP_DIR}/_ota_releases.json"
+    if [ -n "${FASTFI_OTA_FAKE_RELEASES:-}" ]; then
+        [ -f "${FASTFI_OTA_FAKE_RELEASES}" ] || die 2 "Release list unavailable."
+        cp "${FASTFI_OTA_FAKE_RELEASES}" "$dest"
+        return 0
+    fi
+    local json
+    json="$(fetch "https://api.github.com/repos/${OWNER}/${REPO}/releases?per_page=20" "-")" || \
+        die 2 "GitHub API request failed."
+    [ -n "$json" ] || die 2 "Empty response from GitHub API."
+    printf '%s\n' "$json" > "$dest"
+    chmod 666 "$dest" 2>/dev/null || true
+}
+
+load_tag_release_json() {
+    local tag="$1"
+    if [ -n "${FASTFI_OTA_FAKE_RELEASE:-}" ]; then
+        [ -f "${FASTFI_OTA_FAKE_RELEASE}" ] || die 2 "Release metadata unavailable."
+        cp "${FASTFI_OTA_FAKE_RELEASE}" "${RELEASE_JSON}"
+        chmod 666 "${RELEASE_JSON}" 2>/dev/null || true
+        return 0
+    fi
+    local json
+    json="$(fetch "https://api.github.com/repos/${OWNER}/${REPO}/releases/tags/${tag}" "-")" || \
+        die 2 "GitHub API request failed."
+    [ -n "$json" ] || die 2 "Empty response from GitHub API."
+    printf '%s\n' "$json" > "${RELEASE_JSON}"
+    chmod 666 "${RELEASE_JSON}" 2>/dev/null || true
+}
+
+assert_stable_tagged_release() {
+    local tag="$1"
+    [ -f "${RELEASE_JSON}" ] || die 2 "Release metadata unavailable."
+    if ! grep -q '"tag_name"' "${RELEASE_JSON}"; then
+        local errmsg
+        errmsg="$(grep -o '"message": *"[^"]*"' "${RELEASE_JSON}" | head -1 | cut -d'"' -f4 || true)"
+        die 2 "GitHub API error: ${errmsg:-no release found}"
+    fi
+    local got
+    got="$(grep -o '"tag_name": *"[^"]*"' "${RELEASE_JSON}" | head -1 | cut -d'"' -f4)"
+    [ "$got" = "$tag" ] || die 1 "Release tag does not match the selected release."
+    local draft pre
+    draft="$(grep -o '"draft": *true\|"draft": *false' "${RELEASE_JSON}" | head -1 || true)"
+    pre="$(grep -o '"prerelease": *true\|"prerelease": *false' "${RELEASE_JSON}" | head -1 || true)"
+    case "$draft" in
+        *true*) die 1 "Draft releases are not eligible." ;;
+    esac
+    case "$pre" in
+        *true*) die 1 "Prereleases are not eligible." ;;
+    esac
+}
+
+# True when the staged tar.gz is the selected overlay bundle and has been
+# checksum-verified. Does not flash.
+bundle_ready() {
+    local fw="${UPDATE_BUNDLE}"
+    [ -s "$fw" ] || die 1 "No downloaded firmware found. Run download first."
+    local listing
+    listing="$(tar -tzf "$fw" 2>/dev/null)" || die 5 "Firmware archive could not be read."
+    printf '%s\n' "$listing" | grep -qE '^(\./)?VERSION$' || \
+        die 5 "Firmware archive has no VERSION file."
+    if printf '%s\n' "$listing" | grep -qE '(^|/)(bootloader|factory|product_info|u-boot)(/|$)'; then
+        die 5 "Firmware archive contains a forbidden partition path."
+    fi
+    if [ -f "${LOG_FILE}" ] && grep -q "CHECKSUM MISMATCH" "${LOG_FILE}"; then
+        die 4 "SHA256 checksum verification failed!"
+    fi
+    if [ ! -f "${LOG_FILE}" ] || ! grep -q "Checksum verified OK\|Proceeding WITHOUT verification" "${LOG_FILE}"; then
+        die 4 "Firmware has not been validated."
+    fi
+    if ! grep -q "Download complete" "${LOG_FILE}"; then
+        die 1 "Download is not complete."
+    fi
+}
+
+disable_auto_updates() {
+    local conf
+    conf="$(ota_schedule_conf)"
+    mkdir -p "$(dirname "$conf")"
+    printf 'enabled=0\n' > "$conf"
+    grep -q '^enabled=0$' "$conf" || die 1 "Could not persist automatic updates off."
+}
+
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # COMMAND DISPATCH
 # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -811,6 +980,8 @@ case "${1:-}" in
         log "Current firmware version: ${CURRENT_VER}"
 
         get_latest_release  # sets LATEST_VER, writes RELEASE_JSON
+        echo "CURRENT=${CURRENT_VER}"
+        echo "LATEST=${LATEST_VER}"
 
         if [ "${LATEST_VER}" = "${CURRENT_VER}" ]; then
             echo "STATUS=UPTODATE"
@@ -1003,6 +1174,170 @@ case "${1:-}" in
         perform_upgrade "$DEST"
         ;;
 
+    "version-lt")
+        if version_lt "${2:-}" "${3:-}"; then
+            echo yes
+            exit 0
+        fi
+        echo no
+        exit 1
+        ;;
+
+    "releases")
+        load_releases_json
+        if ! grep -q '"tag_name"' "${TMP_DIR}/_ota_releases.json"; then
+            errmsg="$(grep -o '"message": *"[^"]*"' "${TMP_DIR}/_ota_releases.json" | head -1 | cut -d'"' -f4 || true)"
+            die 2 "GitHub API error: ${errmsg:-no releases found}"
+        fi
+        echo "STATUS=OK"
+        echo "FILE=${TMP_DIR}/_ota_releases.json"
+        ;;
+
+    "pin")
+        TAG="${2:-}"
+        valid_release_tag "$TAG" || die 1 "Invalid release tag."
+        load_tag_release_json "$TAG"
+        assert_stable_tagged_release "$TAG"
+        select_update_asset
+        [ -n "$ASSET_URL" ] || die 3 "No compatible update.tar.gz in release ${TAG}."
+        [ "$ASSET_NAME" = "update.tar.gz" ] || die 3 "Refusing an asset that is not update.tar.gz."
+        CURRENT_VER="$(get_current_version)"
+        LATEST_VER="$(grep -o '"tag_name": *"[^"]*"' "${RELEASE_JSON}" | head -1 | cut -d'"' -f4)"
+        LATEST_VER="$(normalize_version "${LATEST_VER}")"
+        PUBLISHED="$(grep -o '"published_at": *"[^"]*"' "${RELEASE_JSON}" | head -1 | cut -d'"' -f4 || true)"
+        printf '%s\n' "$TAG" > "${TMP_DIR}/_ota_selected_tag"
+        printf '%s\n' "$ASSET_URL" > "${TMP_DIR}/_ota_url"
+        rm -f "${TMP_DIR}/_ota_ready" 2>/dev/null || true
+        echo "STATUS=LOADED"
+        echo "CURRENT=${CURRENT_VER}"
+        echo "VERSION=${LATEST_VER}"
+        echo "URL=${ASSET_URL}"
+        echo "ASSET=${ASSET_NAME}"
+        echo "PUBLISHED=${PUBLISHED}"
+        if [ "${LATEST_VER}" = "${CURRENT_VER}" ]; then
+            echo "SAME=1"
+        else
+            echo "SAME=0"
+        fi
+        ;;
+
+    "download-selected")
+        TAG="${2:-}"
+        valid_release_tag "$TAG" || die 1 "Invalid release tag."
+        : > "${LOG_FILE}"
+        load_tag_release_json "$TAG"
+        assert_stable_tagged_release "$TAG"
+        select_update_asset
+        [ -n "$ASSET_URL" ] || die 3 "No compatible update.tar.gz in release ${TAG}."
+        [ "$ASSET_NAME" = "update.tar.gz" ] || die 3 "Refusing an asset that is not update.tar.gz."
+        printf '%s\n' "$TAG" > "${TMP_DIR}/_ota_selected_tag"
+        printf '%s\n' "$ASSET_URL" > "${TMP_DIR}/_ota_url"
+        printf '%s\n' "$ASSET_NAME" > "${TMP_DIR}/_ota_asset_name"
+        rm -f "${TMP_DIR}/_ota_ready" ${TMP_DIR}/*-sysupgrade.bin 2>/dev/null || true
+        ensure_tmp_space 10485760
+        if [ -n "${FASTFI_OTA_FAKE_ASSET:-}" ]; then
+            [ -s "${FASTFI_OTA_FAKE_ASSET}" ] || die 2 "Firmware asset unavailable."
+            cp "${FASTFI_OTA_FAKE_ASSET}" "${UPDATE_BUNDLE}"
+        else
+            download_asset "$ASSET_URL" "${UPDATE_BUNDLE}"
+        fi
+        rm -f "${CHECKSUM_FILE}" 2>/dev/null || true
+        CHECKSUM_URL="$(find_asset_url "sha256sums" 2>/dev/null || true)"
+        if [ -n "$CHECKSUM_URL" ]; then
+            log "Downloading checksum file (fallback)..."
+            fetch "$CHECKSUM_URL" "${CHECKSUM_FILE}" 2>/dev/null || \
+                log "WARNING: Could not download sha256sums (will use release JSON digest)."
+        fi
+        verify_checksum "${UPDATE_BUNDLE}" "${CHECKSUM_FILE}"
+        test_upgrade "${UPDATE_BUNDLE}"
+        log "Download complete"
+        ;;
+
+    "stage-ok")
+        TAG="${2:-}"
+        valid_release_tag "$TAG" || die 1 "Invalid release tag."
+        SEL="$(cat "${TMP_DIR}/_ota_selected_tag" 2>/dev/null || true)"
+        [ "$SEL" = "$TAG" ] || die 1 "Loaded release does not match the selected tag."
+        bundle_ready
+        printf '%s\n' "$TAG" > "${TMP_DIR}/_ota_ready"
+        echo "STATUS=READY"
+        echo "VERSION=$(normalize_version "$(tar -xOzf "${UPDATE_BUNDLE}" VERSION 2>/dev/null | head -1 || true)")"
+        ;;
+
+    "install-selected")
+        TAG="${2:-}"
+        valid_release_tag "$TAG" || die 1 "Invalid release tag."
+        SEL="$(cat "${TMP_DIR}/_ota_selected_tag" 2>/dev/null || true)"
+        READY="$(cat "${TMP_DIR}/_ota_ready" 2>/dev/null || true)"
+        [ "$SEL" = "$TAG" ] && [ "$READY" = "$TAG" ] || die 1 "Select and validate a release before installing it."
+        bundle_ready
+        # Persist off before any flash. A failed apply must not turn this back on.
+        disable_auto_updates
+        log "Automatic updates disabled for the selected version."
+        if [ -n "${FASTFI_OTA_APPLY_CMD:-}" ]; then
+            case "${FASTFI_OTA_APPLY_CMD}" in
+                *[!A-Za-z0-9_./-]*) die 1 "Refusing apply command." ;;
+            esac
+            [ -x "${FASTFI_OTA_APPLY_CMD}" ] || die 1 "Apply command is not executable."
+            "${FASTFI_OTA_APPLY_CMD}"
+        else
+            FIRMWARE="${UPDATE_BUNDLE}"
+            log "Applying: $(basename "$FIRMWARE")..."
+            perform_upgrade "$FIRMWARE"
+        fi
+        ;;
+
+
+    # â”€â”€ RECLAIM (admin/SSH) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    "reclaim")
+        overlay_reclaim
+        echo "FREE_KB=$(overlay_free_kb)"
+        ;;
+
+    # â”€â”€ CONTINUE-FULL (post-bootstrap) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # After a tiny update.tar.gz lands the new OTA engine on a full overlay,
+    # init runs this to pull update-full.tar.gz from the same GitHub release.
+    "continue-full")
+        if [ ! -f "$OVERLAY_PENDING_FULL" ]; then
+            log "continue-full: no pending full OTA flag — nothing to do."
+            exit 0
+        fi
+        : > "${LOG_FILE}"
+        log "continue-full: completing OTA after bootstrap (overlay was too full for a one-shot apply)."
+        overlay_reclaim >/dev/null 2>&1 || true
+        get_latest_release
+        ASSET_URL="$(find_asset_url "update-full.tar.gz" 2>/dev/null || true)"
+        if [ -z "$ASSET_URL" ]; then
+            # Older releases may only ship update.tar.gz as the full package.
+            ASSET_URL="$(find_asset_url "update.tar.gz" 2>/dev/null || true)"
+            ASSET_NAME="update.tar.gz"
+        else
+            ASSET_NAME="update-full.tar.gz"
+        fi
+        [ -n "$ASSET_URL" ] || die 3 "continue-full: no update-full.tar.gz (or update.tar.gz) in release."
+        DEST="${TMP_DIR}/${ASSET_NAME}"
+        ensure_tmp_space 10485760
+        download_asset "$ASSET_URL" "$DEST"
+        { rm -f "${CHECKSUM_FILE}" 2>/dev/null || true; }
+        CHECKSUM_URL="$(find_asset_url "sha256sums" 2>/dev/null || true)"
+        if [ -n "$CHECKSUM_URL" ]; then
+            fetch "$CHECKSUM_URL" "${CHECKSUM_FILE}" 2>/dev/null || true
+        fi
+        verify_checksum "$DEST" "${CHECKSUM_FILE}"
+        # Stage as the standard apply path name.
+        if [ "$DEST" != "$UPDATE_BUNDLE" ]; then
+            cp -f "$DEST" "$UPDATE_BUNDLE" || die 1 "continue-full: cannot stage update bundle."
+        fi
+        log "continue-full: applying ${ASSET_NAME}..."
+        # Clear the flag only once apply is armed; perform_upgrade reboots on
+        # success. If it die()s, leave the flag so the next boot retries.
+        { rm -f "$OVERLAY_PENDING_FULL" 2>/dev/null || true; }
+        perform_upgrade "$UPDATE_BUNDLE" || {
+            { echo 1 > "$OVERLAY_PENDING_FULL" 2>/dev/null || true; }
+            die 1 "continue-full: apply failed; will retry on next boot."
+        }
+        ;;
+
     # â”€â”€ HELP / UNKNOWN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     *)
         echo "FastFi OTA Update System v2.0"
@@ -1010,10 +1345,12 @@ case "${1:-}" in
         echo "Usage: $(basename "$0") <command>"
         echo ""
         echo "Commands:"
-        echo "  check      Check for updates (used by admin panel)"
-        echo "  download   Download the update bundle"
-        echo "  apply      Apply a previously downloaded update"
-        echo "  auto       Unattended: check â†’ download â†’ verify â†’ apply"
+        echo "  check         Check for updates (used by admin panel)"
+        echo "  download      Download the update bundle"
+        echo "  apply         Apply a previously downloaded update"
+        echo "  auto          Unattended: check -> download -> verify -> apply"
+        echo "  reclaim       Free recoverable overlay space"
+        echo "  continue-full Finish a bootstrap OTA (pull update-full.tar.gz)"
         echo ""
         echo "Exit codes:"
         echo "  0 = Success / up to date"

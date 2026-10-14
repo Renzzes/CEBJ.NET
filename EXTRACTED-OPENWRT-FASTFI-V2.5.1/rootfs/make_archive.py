@@ -1,6 +1,32 @@
 import tarfile
 import os
 
+def _ota_etc_kept(path):
+    keep = (
+        'etc/init.d/fastfi',
+        'etc/init.d/koneksik-ap',
+        'etc/fastfi',
+        'etc/koneksik',
+        'etc/sysctl.d/99-fastfi.conf',
+        'etc/hotplug.d/iface/99-fastfi',
+        'etc/crontabs',
+        'etc/rc.local',
+        'etc/sysupgrade.conf',
+    )
+    parents = (
+        'etc/init.d',
+        'etc/sysctl.d',
+        'etc/hotplug.d',
+        'etc/hotplug.d/iface',
+    )
+    if path in parents:
+        return True
+    for item in keep:
+        if path == item or path.startswith(item + '/'):
+            return True
+    return False
+
+
 def filter_function(tarinfo):
     # Normalize paths to use forward slashes for matching
     path = tarinfo.name.replace('\\', '/')
@@ -34,7 +60,19 @@ def filter_function(tarinfo):
         'www/css/bootstrap.min.css',
         'www/chart.min.js',
         'www/jquery/jquery.min.js',
+        # Dev / preview only — already stripped from .bin; keep OTA copy-up small.
+        'www/admin-preview.html',
+        'www/ui-preview.js',
+        'www/js/portal-live-preview.js',
+        'www/css/portal-live-preview.css',
+        'www/index-legacy-fastfi.html',
+        'www/toastr/toastr.js.map',
     ]
+    # Branding and portal media already live in the sysupgrade image. Copying
+    # them again is what made the first GitHub update need ~10 MB of overlay.
+    static_media_ext = (
+        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.mp3', '.woff', '.woff2',
+    )
 
     # uci-defaults are FIRST-BOOT-ONLY by OpenWrt design: a script in
     # /etc/uci-defaults/ runs on the next boot and then auto-deletes on exit 0.
@@ -64,6 +102,16 @@ def filter_function(tarinfo):
             print(f"Excluding (vendor asset, .bin-only): {tarinfo.name}")
             return None
 
+    if path.startswith('www/') and path.lower().endswith(static_media_ext):
+        print(f"Excluding (static media, .bin-only): {tarinfo.name}")
+        return None
+
+    # The .bin already contains OpenWrt's /etc. An update only needs the
+    # KonekSik pieces. Copying stock /etc also fills the overlay and can
+    # replace the customer's saved settings.
+    if path.startswith('etc/') and not _ota_etc_kept(path):
+        return None
+
     for pattern in uci_defaults_patterns:
         if path == pattern or path.endswith('/' + pattern) or ('/' + pattern + '/') in path or path.startswith(pattern + '/'):
             print(f"Excluding (uci-defaults, .bin-only): {tarinfo.name}")
@@ -87,6 +135,36 @@ def filter_function(tarinfo):
 
     print(f"Adding: {tarinfo.name}")
     return tarinfo
+
+def _measure_copy_up(archive_name):
+    need_kb = 0
+    peak_kb = 0
+    peak_name = ""
+    prefixes = (
+        "www/",
+        "usr/lib/lua/fastfi/",
+        "usr/libexec/fastfi/",
+        "etc/",
+    )
+    with tarfile.open(archive_name, "r:gz") as tar:
+        for member in tar.getmembers():
+            if not member.isfile():
+                continue
+            name = member.name.replace("\\", "/")
+            if not name.startswith(prefixes):
+                continue
+            size_kb = (member.size + 4095) // 4096 * 4
+            need_kb += size_kb
+            if size_kb > peak_kb:
+                peak_kb = size_kb
+                peak_name = name
+    return {
+        "need_kb": need_kb,
+        "peak_kb": peak_kb,
+        "peak_name": peak_name,
+        "total_kb": need_kb + peak_kb,
+    }
+
 
 def main():
     archive_name = "update.tar.gz"
@@ -114,6 +192,19 @@ def main():
                 print(f"Warning: Target path '{target}' does not exist.")
                 
     print(f"Archive {archive_name} created successfully!")
+    # Same directories the router measures before apply. BusyBox du -k rounds
+    # each file up to 4 KB. A fresh EW1200G Pro overlay has about 3.7 MB free;
+    # need + largest file must stay under 3.2 MB so customer data still fits.
+    measured = _measure_copy_up(archive_name)
+    print(
+        f"OTA copy-up {measured['need_kb']}KB + peak {measured['peak_kb']}KB "
+        f"({measured['peak_name']}) = {measured['total_kb']}KB"
+    )
+    if measured['total_kb'] > 3200:
+        raise SystemExit(
+            f"OTA bundle is too large for the overlay "
+            f"({measured['total_kb']}KB > 3200KB)."
+        )
 
 if __name__ == "__main__":
     main()
