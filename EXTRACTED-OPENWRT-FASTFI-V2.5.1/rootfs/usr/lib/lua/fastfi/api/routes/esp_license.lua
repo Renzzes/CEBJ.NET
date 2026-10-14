@@ -667,25 +667,32 @@ local function run_sql(exec, sql)
     end
 end
 
+local function lic_where(license_key)
+    local key = sqlite.quote(string.upper(tostring(license_key or "")))
+    return string.format(
+        "(UPPER(COALESCE(license_key,''))='%s' OR UPPER(COALESCE(license_id,''))='%s')",
+        key, key)
+end
+
 local function unbind_license_row(license_key, exec)
     if not license_key or license_key == "" then return end
     run_sql(exec, string.format(
         "UPDATE esp_licenses SET status='unbound', used_slot_id=NULL, " ..
         "last_live_mac=CASE WHEN live_mac IS NOT NULL AND TRIM(live_mac)!='' THEN live_mac ELSE last_live_mac END, " ..
-        "live_mac=NULL, ksk_ever_bound=1 WHERE license_key='%s' OR license_id='%s';",
-        sqlite.quote(license_key), sqlite.quote(license_key)))
+        "live_mac=NULL, ksk_ever_bound=1 WHERE %s;",
+        lic_where(license_key)))
 end
 
 -- Clear every slot demonstrably tied to this license. Signed .ksk stays on the
 -- license row; ksk_now rejects credit without a live_mac binding.
 local function clear_slots_for_license(license_key, live_mac, last_live_mac, exec)
     if not license_key or license_key == "" then return 0 end
-    local key = sqlite.quote(license_key)
+    local key = sqlite.quote(string.upper(tostring(license_key)))
     local cleared = 0
     run_sql(exec, string.format(
         "UPDATE esp_slots SET license_status='unlicensed', license_key=NULL " ..
-        "WHERE license_key='%s' OR license_key='%s';",
-        key, key))
+        "WHERE UPPER(COALESCE(license_key,''))='%s';",
+        key))
     cleared = cleared + 1
     local function clear_mac(mac)
         mac = tostring(mac or ""):upper():gsub("%s+", "")
@@ -693,9 +700,9 @@ local function clear_slots_for_license(license_key, live_mac, last_live_mac, exe
         local safe = sqlite.quote(mac)
         run_sql(exec, string.format(
             "UPDATE esp_slots SET license_status='unlicensed', license_key=NULL " ..
-            "WHERE UPPER(slot_mac)='%s' AND (license_key='%s' OR license_key='%s' OR " ..
+            "WHERE UPPER(slot_mac)='%s' AND (UPPER(COALESCE(license_key,''))='%s' OR " ..
             "license_key IS NULL OR TRIM(COALESCE(license_key,''))='');",
-            safe, key, key))
+            safe, key))
     end
     clear_mac(live_mac)
     clear_mac(last_live_mac)
@@ -704,11 +711,10 @@ end
 
 local function license_snapshot(license_id)
     if not license_id or license_id == "" then return nil end
-    local safe = sqlite.quote(license_id)
     local row = sqlite.query_row(config.ESP_DB, string.format(
         "SELECT license_key, license_id, COALESCE(live_mac,''), COALESCE(last_live_mac,''), used_slot_id " ..
-        "FROM esp_licenses WHERE license_key='%s' OR license_id='%s' LIMIT 1;",
-        safe, safe))
+        "FROM esp_licenses WHERE %s LIMIT 1;",
+        lic_where(license_id)))
     if not row then return nil end
     return {
         license_key = row[1] or license_id,
@@ -735,9 +741,26 @@ function M.unbind(params)
         end
         -- used_slot_id may be null or stale; clear by license key + live/last MAC.
         local key = snap.license_key or license_id
-        local ok_txn, txn_err = sqlite.transaction(config.ESP_DB, function(exec)
+        local ok_txn, txn_err = sqlite.transaction(config.ESP_DB, function(exec, qrow)
             clear_slots_for_license(key, snap.live_mac, snap.last_live_mac, exec)
+            if snap.used_slot_id then
+                exec(string.format(
+                    "UPDATE esp_slots SET license_status='unlicensed', license_key=NULL WHERE id='%s';",
+                    sqlite.quote(tostring(snap.used_slot_id))))
+            end
             unbind_license_row(key, exec)
+            local left = qrow(string.format(
+                "SELECT COALESCE(live_mac,''), COALESCE(status,'') FROM esp_licenses WHERE %s LIMIT 1;",
+                lic_where(key)))
+            if not left then
+                error("license row missing after unbind", 0)
+            end
+            if tostring(left[1] or "") ~= "" then
+                error("live_mac still set after unbind", 0)
+            end
+            if tostring(left[2] or "") ~= "unbound" then
+                error("license status not unbound after unbind", 0)
+            end
         end)
         if not ok_txn then
             return {
@@ -752,6 +775,8 @@ function M.unbind(params)
             status = "ok",
             message = "ESP unbound",
             license_id = snap.license_id or license_id,
+            live_mac = "",
+            status_license = "unbound",
             slots_cleared = true,
         }
     end
@@ -769,7 +794,7 @@ function M.unbind(params)
         return { status = "ok", message = "ESP unbound" }
     end
     snap = license_snapshot(key)
-    local ok_txn, txn_err = sqlite.transaction(config.ESP_DB, function(exec)
+    local ok_txn, txn_err = sqlite.transaction(config.ESP_DB, function(exec, qrow)
         clear_slots_for_license(
             key,
             snap and snap.live_mac or "",
@@ -779,6 +804,15 @@ function M.unbind(params)
         exec(string.format(
             "UPDATE esp_slots SET license_status='unlicensed', license_key=NULL WHERE id='%s';",
             sqlite.quote(tostring(esp_id))))
+        local left = qrow(string.format(
+            "SELECT COALESCE(live_mac,''), COALESCE(status,'') FROM esp_licenses WHERE %s LIMIT 1;",
+            lic_where(key)))
+        if left and tostring(left[1] or "") ~= "" then
+            error("live_mac still set after unbind", 0)
+        end
+        if left and tostring(left[2] or "") ~= "unbound" then
+            error("license status not unbound after unbind", 0)
+        end
     end)
     if not ok_txn then
         return {
@@ -789,7 +823,14 @@ function M.unbind(params)
         }
     end
     os.execute("logger -t fastfi-ksk 'KSK unbound: live binding cleared; signed KSK retained' >/dev/null 2>&1")
-    return { status = "ok", message = "ESP unbound", license_id = key, slots_cleared = true }
+    return {
+        status = "ok",
+        message = "ESP unbound",
+        license_id = key,
+        live_mac = "",
+        status_license = "unbound",
+        slots_cleared = true,
+    }
 end
 
 function M.free(params)

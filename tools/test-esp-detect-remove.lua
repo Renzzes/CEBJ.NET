@@ -88,6 +88,8 @@ local function mock_execute(_, sql)
     end
     if sql:find("UPDATE esp_licenses SET status='unbound'", 1, true) then
         local lid = sql:match("license_key='([^']+)'")
+            or sql:match("UPPER%(COALESCE%(license_key,''%)%)='([^']+)'")
+            or sql:match("UPPER%(COALESCE%(license_id,''%)%)='([^']+)'")
         local r = find_license(lid)
         if r then
             if r.live_mac and r.live_mac ~= "" then
@@ -104,9 +106,14 @@ local function mock_execute(_, sql)
     end
     if sql:find("UPDATE esp_slots SET license_status=", 1, true) then
         local lid = sql:match("license_key='([^']+)'")
+            or sql:match("UPPER%(COALESCE%(license_key,''%)%)='([^']+)'")
         local mac = sql:match("UPPER%(slot_mac%)='([^']+)'")
+        local by_id = sql:match("WHERE id='(%d+)'")
         for _, s in ipairs(db.slots) do
             local match = false
+            if by_id and tostring(s.id) == tostring(by_id) then
+                match = true
+            end
             if lid and string.upper(tostring(s.license_key or "")) == string.upper(lid) then
                 match = true
             end
@@ -145,8 +152,13 @@ local function mock_query_row(_, sql)
         end
         return nil
     end
-    if sql:find("FROM esp_licenses WHERE license_key=", 1, true) and sql:find("SELECT license_key, license_id", 1, true) then
-        local lid = sql:match("license_key='([^']+)'")
+    local function lid_from_sql(s)
+        return s:match("license_key='([^']+)'")
+            or s:match("UPPER%(COALESCE%(license_key,''%)%)='([^']+)'")
+            or s:match("UPPER%(COALESCE%(license_id,''%)%)='([^']+)'")
+    end
+    if sql:find("FROM esp_licenses", 1, true) and sql:find("SELECT license_key, license_id", 1, true) then
+        local lid = lid_from_sql(sql)
         local r = find_license(lid)
         if not r then return nil end
         return {
@@ -157,14 +169,22 @@ local function mock_query_row(_, sql)
             r.used_slot_id,
         }
     end
-    if sql:find("FROM esp_licenses WHERE license_key=", 1, true)
+    if sql:find("FROM esp_licenses", 1, true)
+        and sql:find("SELECT COALESCE(live_mac,''), COALESCE(status", 1, true) then
+        local lid = lid_from_sql(sql)
+        local r = find_license(lid)
+        if not r then return nil end
+        return { r.live_mac or "", r.status or "" }
+    end
+    if sql:find("FROM esp_licenses", 1, true)
         and (sql:find("SELECT id, status", 1, true)
             or sql:find("SELECT COALESCE(live_mac", 1, true)
             or sql:find("SELECT id, status, COALESCE(live_mac", 1, true)) then
-        local lid = sql:match("license_key='([^']+)'")
+        local lid = lid_from_sql(sql)
         local r = find_license(lid)
         if not r then return nil end
-        if sql:find("SELECT COALESCE(live_mac", 1, true) and not sql:find("SELECT id, status", 1, true) then
+        if sql:find("SELECT COALESCE(live_mac", 1, true) and not sql:find("SELECT id, status", 1, true)
+            and not sql:find("COALESCE(status", 1, true) then
             return { r.live_mac or "", r.last_live_mac or "" }
         end
         local has_signed = (r.signed_ksk and r.signed_ksk ~= "") and 1 or 0

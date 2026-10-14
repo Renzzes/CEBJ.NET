@@ -478,25 +478,28 @@ function M.delete_esp_device(params)
     -- All writes share one BEGIN IMMEDIATE transaction; failures roll back.
     local ok_txn, txn_err = sqlite.transaction(config.ESP_DB, function(exec, qrow)
         if license_key ~= "" then
-            local key = sqlite.quote(license_key)
+            local key_u = sqlite.quote(string.upper(tostring(license_key)))
+            local lic_match =
+                "(UPPER(COALESCE(license_key,''))='" .. key_u ..
+                "' OR UPPER(COALESCE(license_id,''))='" .. key_u .. "')"
             local lic = qrow(string.format(
                 "SELECT COALESCE(live_mac,''), COALESCE(last_live_mac,'') FROM esp_licenses " ..
-                "WHERE license_key='%s' OR license_id='%s' LIMIT 1;",
-                key, key))
+                "WHERE %s LIMIT 1;",
+                lic_match))
             local live_mac = (lic and lic[1]) or ""
             local last_live = (lic and lic[2]) or slot_mac
             exec(string.format(
                 "UPDATE esp_slots SET license_status='unlicensed', license_key=NULL " ..
-                "WHERE license_key='%s' OR license_key='%s';",
-                key, key))
+                "WHERE UPPER(COALESCE(license_key,''))='%s';",
+                key_u))
             local function clear_mac(mac)
                 mac = tostring(mac or ""):upper():gsub("%s+", "")
                 if mac == "" then return end
                 exec(string.format(
                     "UPDATE esp_slots SET license_status='unlicensed', license_key=NULL " ..
-                    "WHERE UPPER(slot_mac)='%s' AND (license_key='%s' OR license_key='%s' OR " ..
+                    "WHERE UPPER(slot_mac)='%s' AND (UPPER(COALESCE(license_key,''))='%s' OR " ..
                     "license_key IS NULL OR TRIM(COALESCE(license_key,''))='');",
-                    sqlite.quote(mac), key, key))
+                    sqlite.quote(mac), key_u))
             end
             clear_mac(live_mac)
             clear_mac(last_live)
@@ -504,8 +507,14 @@ function M.delete_esp_device(params)
             exec(string.format(
                 "UPDATE esp_licenses SET status='unbound', used_slot_id=NULL, " ..
                 "last_live_mac=CASE WHEN live_mac IS NOT NULL AND TRIM(live_mac)!='' THEN live_mac ELSE last_live_mac END, " ..
-                "live_mac=NULL, ksk_ever_bound=1 WHERE license_key='%s' OR license_id='%s';",
-                key, key))
+                "live_mac=NULL, ksk_ever_bound=1 WHERE %s;",
+                lic_match))
+            local left = qrow(string.format(
+                "SELECT COALESCE(live_mac,''), COALESCE(status,'') FROM esp_licenses WHERE %s LIMIT 1;",
+                lic_match))
+            if left and tostring(left[1] or "") ~= "" then
+                error("live_mac still set after delete unbind", 0)
+            end
         end
         exec(string.format("DELETE FROM esp_slots WHERE id='%s';", safe_id))
         local gone = qrow(string.format(

@@ -1,0 +1,35 @@
+---
+description: KonekSik-Fi GitHub OTA dual-asset release process (bootstrap + full)
+alwaysApply: true
+---
+
+# KonekSik OTA / GitHub Release Rule
+
+Customers update via **GitHub Check for Updates**, not `.bin`. Full reference: `docs/OTA_RELEASE_PROCESS.md`.
+
+## Every new firmware release MUST
+
+1. Bump both `EXTRACTED-OPENWRT-FASTFI-V2.5.1/rootfs/VERSION` and `www/version.txt`.
+2. Build **full** then **bootstrap**:
+   - `python make_archive.py` → rename to `update-full.tar.gz`
+   - `python tools/make_ota_bootstrap.py` → `update.tar.gz` (need+peak ≤ **160 KB**)
+   - Bootstrap **must** carry Delete/Unbind lifecycle Lua + `admin-esp-lifecycle.js` (not only ota.sh).
+3. Build `.bin` with **absolute** overlay path via `tools/build-ruijie-wsl.ps1` + symlink gate.
+4. Stage `KonekSik-fi Piso Wifi Production/releases/vX.Y.Z/` and publish Latest with **all** of:
+   - `update.tar.gz` (bootstrap)
+   - `update-full.tar.gz` (full)
+   - `KonekSik-fi-EW1200G-PRO-sysupgrade.bin` (+ sha256)
+   - `sha256sums`
+5. NOTES: bootstrap lands lifecycle immediately; then auto `continue-full` if engine present; `.bin` = new/recovery only.
+
+## Never
+
+- Ship Latest with only a multi-MB `update.tar.gz` (breaks ~168 KB-free overlays).
+- Ship a bootstrap that updates VERSION/ota.sh but **omits** Delete/Unbind handlers (leaves Admin broken).
+- Set `.ota_overlay_code` unless full www+lua+libexec copied.
+- Auto-select `.bin` for OTA (wipes operator data risk).
+- Flash production or mint RTR/KSK unless explicitly authorized.
+
+## Preserve unless the release changelog says otherwise
+
+KSK / peer / RTR / Flash Auth / GPIO pulse / SET-HOLD / Autopause **Grace Period (sec)**.
