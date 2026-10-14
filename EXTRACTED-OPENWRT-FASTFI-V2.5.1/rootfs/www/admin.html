@@ -8,12 +8,20 @@
 <!-- devtools guard (anti-inspection) — operator bypass: append ?ddtk=fastfi-admin -->
 <script>window.FASTFI_DDT_MODE='admin';</script>
 <script src="./lib/disable-devtool.min.js?v=0.3.9"></script>
-<script src="./lib/devtool-guard.js?v=1"></script>
+<script src="./lib/devtool-guard.js?v=2"></script>
 <link rel="shortcut icon" href="./image/CEBJ_ICON.png" type="image/png">
 <link rel="icon" href="./image/CEBJ_ICON.png" type="image/png">
 <link rel="stylesheet" href="./css/bootstrap.min.css">
-<link rel="stylesheet" href="./css/admin.css?v=23-table-ui">
+<link rel="stylesheet" href="./css/admin.css?v=2.6.66">
+<style>
+.ff-guide{margin:0;font-size:13px;line-height:1.45;color:#94a3b8}
+.ff-guide strong{color:#e2e8f0}
+.ff-guide ul{margin:0 0 8px 1.1rem;padding:0}
+.qa-mobile{display:none}
+@media(max-width:768px){.qa-desktop{display:none!important}.qa-mobile{display:block}.qa-mobile .form-select{width:100%}}
+</style>
 <link rel="stylesheet" href="./css/portal-live-preview.css?v=4">
+<link rel="stylesheet" href="./css/admin-mobile.css?v=2.6.42">
 <script src="./icons.js?v=19"></script>
 <script src="./chart.min.js"></script>
 <script src="./lib/qrcode.js?v=1"></script>
@@ -21,18 +29,20 @@
 
 <body>
 
-<!-- Password Recovery: licence-key tail -->
+<!-- Password Recovery: RTR- licence tail (offline) -->
 <div id="recoveryModal" class="modal-overlay" style="z-index:9999;">
     <div class="modal-card" style="max-width:420px;">
         <h3 style="margin-bottom:8px;">Reset Admin Password</h3>
         <p class="text-muted" style="font-size:13px; margin-bottom:14px;">
-            Enter the <strong>last two groups</strong> of this router's licence key.
+            Enter the <strong>last 8 characters</strong> of this router's <code>RTR-</code> licence ID
+            (shown under Settings → CEBJ.NET Licence).
         </p>
         <input type="text" class="form-control mb-2" id="licenseTail"
-               placeholder="XXXX-XXXX" autocomplete="off" spellcheck="false"
+               placeholder="XXXXXXXX" autocomplete="off" spellcheck="false"
                style="text-align:center; letter-spacing:2px; text-transform:uppercase;">
         <div class="form-text mb-3" style="font-size:12px;">
-            Example: for <code>STD-7K4M-9QP2-A83B-6RC4</code> enter <code>A83B-6RC4</code>.
+            Example: for <code>RTR-AABBCCDDEEFF0011</code> enter <code>EEFF0011</code>
+            (or paste the part after <code>RTR-</code>).
             The password resets to <code>admin123</code> and you must set a new one straight away.
         </div>
         <div id="recoveryMsg" class="mb-2" style="font-size:13px;"></div>
@@ -132,10 +142,8 @@
 
     <div class="nav-label">Management</div>
     <button type="button" class="nav-item" data-nav="rates" onclick="showRates();closeSidebarMobile()"><i data-icon="coins" data-size="16"></i><span>Coin Rates</span></button>
-    <button type="button" class="nav-item" data-nav="plans" onclick="showPlans();closeSidebarMobile()"><i data-icon="file-text" data-size="16"></i><span>Plans</span></button>
-    <button type="button" class="nav-item" data-nav="bandwidth" onclick="showBandwidth();closeSidebarMobile()"><i data-icon="activity" data-size="16"></i><span>Bandwidth</span></button>
-    <button type="button" class="nav-item" data-nav="plan-clients" onclick="showPlanClients();closeSidebarMobile()"><i data-icon="users" data-size="16"></i><span>Plan Clients</span></button>
-    <button type="button" class="nav-item" data-nav="sessions" onclick="showSessions();closeSidebarMobile()"><i data-icon="users" data-size="16"></i><span>Sessions</span></button>
+<button type="button" class="nav-item" data-nav="bandwidth" onclick="showBandwidth();closeSidebarMobile()"><i data-icon="activity" data-size="16"></i><span>Bandwidth</span></button>
+<button type="button" class="nav-item" data-nav="sessions" onclick="showSessions();closeSidebarMobile()"><i data-icon="users" data-size="16"></i><span>Sessions</span></button>
     <button type="button" class="nav-item" data-nav="devices" onclick="showDevices();closeSidebarMobile()"><i data-icon="smartphone" data-size="16"></i><span>Devices</span></button>
     <button type="button" class="nav-item" data-nav="waiting" onclick="showWaitingQueue();closeSidebarMobile()"><i data-icon="clock" data-size="16"></i><span>Waiting Queue</span></button>
     <button type="button" class="nav-item" data-nav="vouchers" onclick="showVouchers();closeSidebarMobile()"><i data-icon="ticket" data-size="16"></i><span>Vouchers</span></button>
@@ -151,7 +159,6 @@
     <div class="nav-label">System</div>
     <button type="button" class="nav-item" data-nav="settings" onclick="showSettings();closeSidebarMobile()"><i data-icon="settings" data-size="16"></i><span>Settings</span></button>
     <button type="button" class="nav-item" data-nav="operators" onclick="showOperators();closeSidebarMobile()"><i data-icon="shield" data-size="16"></i><span>Operators</span></button>
-    <button type="button" class="nav-item" data-nav="reports" onclick="showReports();closeSidebarMobile()"><i data-icon="bar-chart-2" data-size="16"></i><span>Reports</span></button>
     <button type="button" class="nav-item" data-nav="remote-access" onclick="showRemoteAccess();closeSidebarMobile()"><i data-icon="cloud" data-size="16"></i><span>Remote Access</span></button>
     <button type="button" class="nav-item" data-nav="sub-vendo" onclick="showESPSlots();closeSidebarMobile()"><i data-icon="cpu" data-size="16"></i><span>Sub Vendo</span></button>
     <button type="button" class="nav-item" data-nav="update" onclick="showUpdate();closeSidebarMobile()"><i data-icon="refresh-cw" data-size="16"></i><span>OTA Update</span></button>
@@ -198,7 +205,20 @@
     <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="zap" data-size="18"></i> Quick Actions</h5>
 </div>
 <div class="card-body">
-<div class="d-flex gap-2 flex-wrap">
+<div class="qa-mobile">
+<select class="form-select" id="quickActionsMobile" aria-label="Quick actions" onchange="if(this.value){ffQuickAction(this.value);this.value='';}">
+<option value="">Choose an action</option>
+<option value="update">System Update</option>
+<option value="sales">View Sales</option>
+<option value="sessions">View Sessions</option>
+<option value="ap">Access Points</option>
+<option value="vouchers">Generate Vouchers</option>
+<option value="vendo">Sub Vendo</option>
+<option value="network">Network Config</option>
+<option value="reboot">Reboot Router</option>
+</select>
+</div>
+<div class="d-flex gap-2 flex-wrap qa-desktop">
     <button id="btnSystemUpdate" onclick="showUpdate()" class="btn btn-info d-flex align-items-center gap-2 text-white" style="border: 2px solid white !important;"><i data-icon="refresh-cw" data-size="16"></i> System Update</button>
     <button onclick="showSales()" class="btn btn-primary d-flex align-items-center gap-2"><i data-icon="trending-up" data-size="16"></i> View Sales</button>
     <button onclick="showSessions()" class="btn btn-primary d-flex align-items-center gap-2"><i data-icon="users" data-size="16"></i> View Sessions</button>
@@ -364,6 +384,16 @@
         <button class="btn btn-primary btn-sm" onclick="saveRates()"><i data-icon="save" data-size="14"></i> Save Rates</button>
     </div>
 </div>
+<details class="ff-guide">
+<summary>How to set a speed on each price</summary>
+<p class="mb-1">Type the numbers on that row, then press <strong>Save Rates</strong>. A customer who inserts that price gets that row.</p>
+<ul class="mb-2">
+<li><strong>DL Limit (Mbps)</strong> is the fastest download. <code>10</code> is about 10 Mbps down. <code>0</code> means no extra download cap.</li>
+<li><strong>UL Limit (Mbps)</strong> is the fastest upload. <code>5</code> is about 5 Mbps up. <code>0</code> means no extra upload cap.</li>
+<li><strong>Data (MB)</strong> is how many megabytes they can use, not a speed. <code>500</code> stops them after about 500 MB. <code>0</code> means unlimited data; only the time limit applies.</li>
+</ul>
+<p class="mb-0">Example: ₱5 → 5/5 Mbps, ₱10 → 10/10 Mbps, ₱20 → 20/20 Mbps. The speed comes from the highest price their coins reach. Extra coins add time from the cheaper rows. They do not add the speeds together. Pause Limit: use <strong>0</strong> to inherit Settings → Pause Limit Settings.</p>
+</details>
 <div class="table-responsive"><table class="table table-hover table-striped align-middle table-bordered table-sm text-nowrap mb-0">
 <thead class="table-dark">
 <tr>
@@ -568,7 +598,7 @@
     
     <div class="card-header-actions">
         <button class="btn btn-danger btn-sm" onclick="document.getElementById('modalDeleteVouchers').classList.add('show')"><i data-icon="trash-2" data-size="14"></i> Delete</button>
-        <button class="btn btn-primary btn-sm" onclick="document.getElementById('modalGenerateVouchers').classList.add('show');updateVoucherDurationPreview()"><i data-icon="plus" data-size="14"></i> Generate</button>
+        <button class="btn btn-primary btn-sm" onclick="ffOpenGenerateVouchers()"><i data-icon="plus" data-size="14"></i> Generate</button>
         <button onclick="openPrintVouchersModal()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"><i data-icon="printer" data-size="14"></i> Print</button>
         <button onclick="exportVouchersCSV()" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1"><i data-icon="download" data-size="14"></i> Export CSV</button>
     </div>
@@ -579,6 +609,7 @@
 <th>Code</th>
 <th>Duration</th>
 <th>Price</th>
+<th>Speed profile</th>
 <th>Batch</th>
 <th>Created</th>
 <th>Expires</th>
@@ -612,6 +643,7 @@
             </div>
             <div class="col-6"><label class="form-label fw-semibold">Validity (days)</label><input type="number" class="form-control" id="voucherExpiry" value="365" min="0" max="3650"><div class="form-text">How long the code stays usable. 365 = 1 year · 0 = never expires</div></div>
             <div class="col-6"><label class="form-label fw-semibold">Batch Name</label><input type="text" class="form-control" id="voucherBatch" placeholder="e.g. MARCH-2026"></div>
+            <div class="col-12"><label class="form-label fw-semibold">Speed profile</label><select class="form-select" id="voucherProfile"><option value="">Loading profiles...</option></select><div class="form-text">Customer gets this download and upload speed when the voucher is used. Create the plan under Bandwidth first.</div></div>
         </div>
         <div class="d-flex justify-content-end gap-2">
             <button onclick="document.getElementById('modalGenerateVouchers').classList.remove('show')" class="btn btn-outline-secondary">Cancel</button>
@@ -702,92 +734,160 @@
 <!-- GCASH E-PAYMENT -->
 <div id="gcashSection" class="hidden">
 
-<div class="card shadow-sm mb-4 border-0">
-<div class="card-header card-header-custom d-flex justify-content-between align-items-center">
-    <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="smartphone" data-size="18"></i> GCash E-Payment</h5>
-    <div class="form-check form-switch ff-toggle mb-0">
-        <input class="form-check-input" type="checkbox" role="switch" id="gcashEnabled">
-        <label class="form-check-label fw-semibold" for="gcashEnabled">Enable</label>
+<div class="gcash-hero mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+        <div>
+            <p class="gcash-kicker mb-1">Owner-owned payments</p>
+            <h4 class="gcash-title mb-2">GCash</h4>
+            <p class="gcash-lead mb-0">Customers pay your GCash. Your phone companion claims the order and SMS-es a WiFi code. No payment gateway.</p>
+        </div>
+        <input type="checkbox" id="gcashEnabled" class="d-none" tabindex="-1" aria-hidden="true">
+        <button type="button" id="gcashEnableBtn" class="btn gcash-enable-btn" onclick="ffToggleGcashEnabled()">
+            Enable GCash
+        </button>
+    </div>
+    <ol class="gcash-flow-rail mt-4 mb-0">
+        <li><span class="gcash-flow-num">1</span><span>Setup on router</span></li>
+        <li><span class="gcash-flow-num">2</span><span>Mint voucher pool</span></li>
+        <li><span class="gcash-flow-num">3</span><span>Export → companion app</span></li>
+        <li><span class="gcash-flow-num">4</span><span>Customer pays → SMS code</span></li>
+    </ol>
+</div>
+
+<div class="row g-3 mb-3" id="gcashReadyRow">
+    <div class="col-6 col-md-3">
+        <div class="gcash-ready-card" id="gcashReadyEnabled"><span class="gcash-ready-label">Feature</span><strong id="gcashReadyEnabledVal">Off</strong></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="gcash-ready-card" id="gcashReadyPay"><span class="gcash-ready-label">Pay target</span><strong id="gcashReadyPayVal">Missing</strong></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="gcash-ready-card" id="gcashReadySecret"><span class="gcash-ready-label">App secret</span><strong id="gcashReadySecretVal">Missing</strong></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="gcash-ready-card" id="gcashReadyPool"><span class="gcash-ready-label">Pool codes</span><strong id="gcashReadyPoolVal">0</strong></div>
     </div>
 </div>
-<div class="card-body">
-<p class="card-subtitle mb-3 text-muted">Owner-owned GCash flow (no payment gateway, no vendor app required). Enable GCash, set your number/QR, generate a companion secret, mint a voucher pool, and export the JSON into <strong>your</strong> Android companion app in <code>gcash-companion/</code>. Customers enter their mobile and pick a package on the portal, pay the exact amount, then your phone app claims the order and SMS-es a WiFi code for them to enter under Wifi Pass.</p>
 
-<div class="row gx-3 gy-3 mb-3">
-    <div class="col-sm-6 col-md-4 col-lg-3">
-        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Operator GCash Number</label>
-        <input type="text" class="form-control" id="gcashNumber" placeholder="09XXXXXXXXX">
-        <div class="form-text">The number customers send to.</div>
-    </div>
-    <div class="col-sm-6 col-md-4 col-lg-3">
-        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">GCash QR Image</label>
-        <div class="d-flex align-items-center gap-2 mb-1">
-            <img id="gcashQrPreview" src="" alt="QR" style="width:56px;height:56px;object-fit:cover;border-radius:8px;display:none;border:1px solid #e2e8f0;">
-            <div class="flex-grow-1">
-                <input type="file" class="form-control form-control-sm" id="gcashQrFile" accept="image/*">
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 h-100 gcash-step-card">
+            <div class="card-header card-header-custom">
+                <h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><span class="gcash-step-badge">1</span> Setup</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">Who customers pay, and how your phone app talks to this router.</p>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold mb-1">Operator GCash number</label>
+                    <input type="text" class="form-control" id="gcashNumber" placeholder="09XXXXXXXXX" inputmode="tel">
+                    <div class="form-text">Number customers send money to.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold mb-1">GCash QR image</label>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <img id="gcashQrPreview" src="" alt="QR" class="gcash-qr-thumb" style="display:none;">
+                        <div class="gcash-file-picker flex-grow-1">
+                            <input type="file" id="gcashQrFile" class="gcash-file-input" accept="image/*" onchange="ffGcashQrFileChanged(this)">
+                            <button type="button" class="btn btn-sm gcash-file-btn d-inline-flex align-items-center gap-1" onclick="document.getElementById('gcashQrFile').click()">
+                                <i data-icon="image" data-size="14"></i> Choose file
+                            </button>
+                            <span id="gcashQrFileName" class="gcash-file-name">No file chosen</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1" type="button" onclick="uploadGcashQr()"><i data-icon="upload" data-size="13"></i> Upload QR</button>
+                    <input type="hidden" id="gcashQr" value="">
+                    <div class="form-text">PNG/JPG up to 2MB · shown on portal pay screen.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold mb-1">Companion app secret</label>
+                    <div class="d-flex align-items-center gap-2">
+                        <input type="text" class="form-control" id="gcashSecretDisplay" placeholder="Not generated" readonly>
+                        <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1 flex-shrink-0" type="button" onclick="generateGcashSecret()"><i data-icon="key" data-size="14"></i> Generate</button>
+                    </div>
+                    <div class="form-text">Paste into companion <strong>Setup → Router secret</strong>. Shown only once.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold mb-1">Voucher expiry (days)</label>
+                    <input type="number" class="form-control" id="gcashVoucherExpiry" value="0" min="0" max="365">
+                    <div class="form-text">0 = no expiry on minted codes.</div>
+                </div>
+                <div class="gcash-option-box mb-3">
+                    <div class="form-check form-switch mb-1 d-flex align-items-center gap-2">
+                        <input class="form-check-input" type="checkbox" role="switch" id="gcashFreewindowEnabled">
+                        <label class="form-check-label fw-semibold" for="gcashFreewindowEnabled">GCash app access</label>
+                    </div>
+                    <div class="form-text mb-0">~60s pay window after starting a GCash order (order-gated; 3&nbsp;min cooldown; 6/day). Not free WiFi.</div>
+                </div>
+                <button class="btn btn-primary w-100 d-inline-flex align-items-center justify-content-center gap-2" onclick="saveGcashConfig()"><i data-icon="save" data-size="16"></i> Save setup</button>
             </div>
         </div>
-        <button class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1" type="button" onclick="uploadGcashQr()"><i data-icon="upload" data-size="13"></i> Upload QR</button>
-        <input type="hidden" id="gcashQr" value="">
-        <div class="form-text">PNG/JPG up to 2MB. Shown on the portal pay screen.</div>
     </div>
-    <div class="col-sm-6 col-md-4 col-lg-3">
-        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Companion App Secret</label>
-        <div class="d-flex align-items-center gap-2">
-            <input type="text" class="form-control" id="gcashSecretDisplay" placeholder="Not generated" readonly>
-            <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-1" type="button" onclick="generateGcashSecret()"><i data-icon="key" data-size="14"></i> Generate</button>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 h-100 gcash-step-card">
+            <div class="card-header card-header-custom">
+                <h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><span class="gcash-step-badge">2</span> Mint pool</h5>
+            </div>
+            <div class="card-body d-flex flex-column">
+                <p class="text-muted small mb-3">Create WiFi voucher codes for each coin rate. The companion app uses these when a payment arrives.</p>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold mb-1">Codes per rate</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="gcashCodesPerRate" value="20" min="1" max="200">
+                        <button class="btn btn-outline-primary" type="button" onclick="generateGcashPool()">Generate</button>
+                    </div>
+                    <div class="form-text">Example: 20 codes × every rate in Rates.</div>
+                </div>
+                <div class="gcash-tip mb-3">
+                    <strong>Tip:</strong> Generate again when inventory is low, then export a fresh JSON to the phone.
+                </div>
+                <div class="mt-auto">
+                    <button class="btn btn-outline-secondary w-100 d-inline-flex align-items-center justify-content-center gap-2" onclick="loadGcashConfig()"><i data-icon="refresh-cw" data-size="14"></i> Refresh inventory</button>
+                </div>
+            </div>
         </div>
-        <div class="form-text">Paste into your KonekSik GCash companion app (Setup → Router secret). Shown only once when generated.</div>
     </div>
-    <div class="col-sm-6 col-md-4 col-lg-3">
-        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Voucher Expiry (days, 0 = none)</label>
-        <input type="number" class="form-control" id="gcashVoucherExpiry" value="0" min="0" max="365">
-        <div class="form-text">Expiry on minted codes.</div>
-    </div>
-    <div class="col-sm-6 col-md-4 col-lg-3">
-        <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;">Codes Per Rate (Generate Pool)</label>
-        <div class="input-group input-group-sm">
-            <input type="number" class="form-control" id="gcashCodesPerRate" value="20" min="1" max="200">
-            <button class="btn btn-outline-primary" type="button" onclick="generateGcashPool()">Generate</button>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 h-100 gcash-step-card">
+            <div class="card-header card-header-custom">
+                <h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><span class="gcash-step-badge">3</span> Companion app</h5>
+            </div>
+            <div class="card-body d-flex flex-column">
+                <p class="text-muted small mb-3">Install <code>gcash-companion/</code> on the phone that receives GCash notifications.</p>
+                <ol class="gcash-checklist small mb-3">
+                    <li>Paste the <strong>app secret</strong> from Step 1</li>
+                    <li>Set router URL (usually <code>http://10.0.0.1</code>)</li>
+                    <li>Import the exported pool JSON</li>
+                    <li>Allow Notification access + SMS</li>
+                    <li>Turn on <strong>Enable payment listening</strong></li>
+                </ol>
+                <button class="btn btn-success w-100 d-inline-flex align-items-center justify-content-center gap-2 mb-2" onclick="exportGcashPool()"><i data-icon="download" data-size="16"></i> Export for companion app</button>
+                <div class="form-text mb-0">Downloads JSON the app expects: <code>packages[{price, minutes, codes[]}]</code>.</div>
+            </div>
         </div>
-        <div class="form-text">Mints N codes for each coin rate.</div>
     </div>
 </div>
 
-<!-- GCash Free Browsing Window (grant-first; replaces the v2.1.2 walled garden) -->
-<hr class="my-3">
-<div class="mb-2">
-    <div class="form-check form-switch mb-2 d-flex align-items-center gap-2">
-        <input class="form-check-input" type="checkbox" role="switch" id="gcashFreewindowEnabled">
-        <label class="form-check-label fw-semibold" for="gcashFreewindowEnabled">GCash app access</label>
+<div id="gcashStatus" class="gcash-status mt-3 mb-3" style="font-size:13px;"></div>
+
+<div class="card shadow-sm border-0 mt-2">
+    <div class="card-header card-header-custom d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="bar-chart-2" data-size="16"></i> Pool inventory</h5>
+        <small class="text-muted">Batch = <code>gcash</code> · Available = ready to dispense</small>
     </div>
-    <div class="form-text">When ON (default), customers with no active session get a short GCash app access window from the portal so they can open the GCash app and pay.</div>
-</div>
-
-<div class="d-flex gap-2 flex-wrap mb-2">
-    <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveGcashConfig()"><i data-icon="save" data-size="16"></i> Save Changes</button>
-    <button class="btn btn-success d-inline-flex align-items-center gap-2" onclick="exportGcashPool()"><i data-icon="download" data-size="16"></i> Export for Companion App</button>
-    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" onclick="loadGcashConfig()"><i data-icon="refresh-cw" data-size="13"></i> Refresh Pool</button>
-</div>
-<div id="gcashStatus" class="mb-3" style="font-size:13px;"></div>
-
-<!-- Pool inventory -->
-<hr class="my-3">
-<div class="d-flex justify-content-between align-items-center mb-2">
-    <h6 class="fw-bold mb-0 d-flex align-items-center gap-2"><i data-icon="bar-chart-2" data-size="16"></i> Pool Inventory</h6>
-    <small class="text-muted">Codes minted with batch = "gcash". Available = active codes ready to dispense.</small>
-</div>
-<div class="table-responsive">
-    <table class="table table-hover table-striped align-middle styled-table" style="font-size:13px;">
-        <thead class="table-dark">
-            <tr><th>Rate (₱)</th><th>Minutes</th><th>Total</th><th>Available</th><th>Redeemed</th><th>Status</th></tr>
-        </thead>
-        <tbody id="gcashPoolBody">
-            <tr><td colspan="6" class="text-center text-muted py-3">No pool generated yet.</td></tr>
-        </tbody>
-    </table>
-</div>
-</div>
+    <div class="card-body pt-2">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped align-middle styled-table mb-0" style="font-size:13px;">
+                <thead class="table-dark">
+                    <tr><th>Rate (₱)</th><th>Minutes</th><th>Total</th><th>Available</th><th>Redeemed</th><th>Status</th></tr>
+                </thead>
+                <tbody id="gcashPoolBody">
+                    <tr><td colspan="6" class="text-center text-muted py-3">No pool generated yet.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 </div>
@@ -798,13 +898,13 @@
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h4 class="mb-0" style="color:var(--text-primary);"><i data-icon="cpu" data-size="20" class="me-2"></i>Sub Vendo (ESP32) Management</h4>
     <div class="d-flex gap-2 flex-wrap">
-        <button type="button" onclick="detectESP32()" class="btn btn-primary d-inline-flex align-items-center gap-2"><i data-icon="radar" data-size="16"></i> Detect ESP32</button>
+        <button type="button" onclick="document.getElementById('detectBindEspCard')?.scrollIntoView({behavior:'smooth'});document.getElementById('detectKskFile')?.focus()" class="btn btn-primary d-inline-flex align-items-center gap-2"><i data-icon="radar" data-size="16"></i> Detect / Bind ESP32</button>
         <button type="button" onclick="loadESPDevices();loadLicensePool();" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2"><i data-icon="refresh-cw" data-size="16"></i> Refresh All</button>
     </div>
 </div>
 
 <!-- Sub Vendo Metrics Row -->
-<div class="row g-3 mb-4">
+<div class="row g-3 mb-4 ff-metric-row">
     <div class="col-md-3 col-6">
         <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface);">
             <div class="card-body p-3 d-flex align-items-center gap-3">
@@ -867,30 +967,49 @@
     <span id="totalLicenseCount">0</span>
 </div>
 
-<div class="card shadow-sm border-0 mb-4">
+<div class="card shadow-sm border-0 mb-4" id="detectBindEspCard">
     <div class="card-header card-header-custom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h5 class="card-header-title mb-0"><i data-icon="radar" data-size="16"></i> Detect / Bind ESP32</h5>
     </div>
     <div class="card-body">
-        <p class="text-muted small mb-3">Automatic when the ESP registers with a KSK license ID. Or enter MAC + License ID manually and click Detect.</p>
-        <div class="row g-2 align-items-end">
+        <p class="text-muted small mb-3">Use Detect / Bind ESP32 to register a licensed ESP using its signed <code>.ksk</code> file. Workflow: <strong>Load → Verify compatibility → Bind</strong>. A License ID alone cannot bind.</p>
+        <div class="row g-2 align-items-end mb-2">
             <div class="col-md-4">
                 <label class="form-label small fw-bold mb-1">ESP32 MAC</label>
-                <input type="text" class="form-control form-control-sm" id="detectEspMac" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off">
+                <div class="input-group input-group-sm">
+                    <input type="text" class="form-control form-control-sm" id="detectEspMac" placeholder="AA:BB:CC:11:22:33 or Find MAC" autocomplete="off">
+                    <button type="button" class="btn btn-outline-secondary" onclick="scanEspMac()" title="Scan LAN">Find MAC</button>
+                </div>
             </div>
-            <div class="col-md-4">
-                <label class="form-label small fw-bold mb-1">License ID (from Flasher)</label>
-                <input type="text" class="form-control form-control-sm" id="detectLicenseId" placeholder="KSK-…" autocomplete="off">
-            </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
                 <label class="form-label small fw-bold mb-1">Name (optional)</label>
                 <input type="text" class="form-control form-control-sm" id="detectEspName" placeholder="Counter ESP">
             </div>
-            <div class="col-md-2">
-                <button type="button" class="btn btn-primary btn-sm w-100" onclick="detectESP32()">Detect ESP32</button>
+            <div class="col-md-5">
+                <label class="form-label small fw-bold mb-1">Signed KSK License</label>
+                <input type="file" class="form-control form-control-sm" id="detectKskFile" accept=".ksk,.json,application/json,text/plain" onchange="loadDetectKskFile(this)">
             </div>
         </div>
-        <p id="detectEspResult" class="small mt-2 mb-0 text-muted"></p>
+        <input type="hidden" id="detectLicenseId" value="">
+        <div id="detectKskPreview" class="small border rounded p-2 mb-3 bg-light" style="display:none;">
+            <div class="fw-bold mb-1">Loaded license (not bound yet)</div>
+            <div><strong>License ID:</strong> <span id="detectKskPreviewId" class="font-monospace">—</span></div>
+            <div><strong>ESP MAC:</strong> <span id="detectKskPreviewMac" class="font-monospace">—</span></div>
+            <div><strong>ESP Chip ID:</strong> <span id="detectKskPreviewChip" class="font-monospace">—</span></div>
+            <div><strong>Router Device ID:</strong> <span id="detectKskPreviewRouter" class="font-monospace">—</span></div>
+            <div><strong>Plan:</strong> <span id="detectKskPreviewPlan">—</span></div>
+            <div><strong>Expiry:</strong> <span id="detectKskPreviewExpiry">—</span></div>
+            <div><strong>KSK:</strong> <span id="detectKskLoadedState">Not loaded</span></div>
+            <div><strong>Compatibility:</strong> <span id="detectKskCompatState">Not verified</span></div>
+            <div><strong>Binding:</strong> <span id="detectKskBindState">Not bound</span></div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mb-2">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="btnVerifyEspKsk" onclick="verifyEspKskCompatibility()" disabled>Detect / Verify ESP32 License Compatibility</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btnBindEspKsk" onclick="bindEspKsk()" disabled>BIND ESP32</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearDetectKsk()">Clear KSK</button>
+        </div>
+        <div id="detectVerifyResult" class="small mb-2" style="display:none;"></div>
+        <p id="detectEspResult" class="small mt-2 mb-0 text-muted">Load a signed .ksk license to continue.</p>
     </div>
 </div>
 
@@ -901,17 +1020,7 @@
                 <h5 class="card-header-title mb-0"><i data-icon="key" data-size="16"></i> ESP32 Licensed Devices</h5>
             </div>
             <div class="card-body">
-                <div class="row mb-3">
-                    <div class="col-12">
-                        <div class="d-flex gap-2 flex-wrap">
-                            <div class="input-group flex-grow-1" style="min-width:220px;">
-                                <span class="input-group-text"><i data-icon="key" data-size="16"></i></span>
-                                <input type="text" class="form-control" id="newLicenseKey" placeholder="Register License ID (KSK-…) — optional if Detect already ran">
-                            </div>
-                            <button type="button" onclick="addLicenseToPool()" class="btn btn-outline-primary d-flex align-items-center gap-2 px-3 text-nowrap"><i data-icon="plus" data-size="16"></i> Register License</button>
-                        </div>
-                    </div>
-                </div>
+                <p class="text-muted small mb-3">These are KSK licenses and their current binding status.</p>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle table-sm mb-0">
                         <thead>
@@ -919,7 +1028,7 @@
                             <th>License ID</th>
                             <th>Status</th>
                             <th>Live ESP MAC</th>
-                            <th>Grace used</th>
+                            <th>Bound MAC</th>
                             <th>Last bound</th>
                             <th>Action</th>
                         </tr>
@@ -937,6 +1046,7 @@
 <div class="card shadow-sm mb-4 border-0">
 <div class="card-header card-header-custom"><h5 class="card-header-title"><i data-icon="cpu" data-size="16"></i> Registered ESP32 Devices</h5></div>
 <div class="card-body">
+<p class="text-muted small mb-3">These are ESP devices currently registered with this router.</p>
 <div class="table-responsive"><table class="table table-hover align-middle table-sm mb-0">
 <thead>
 <tr>
@@ -960,21 +1070,21 @@
 <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="help-circle" data-size="18"></i> How It Works</h5></div>
 <div class="card-body">
 <ul class="text-muted" style="line-height:1.8;">
-    <li><strong>Offline licenses:</strong> No cloud. Seller uses <em>Flasher-and-License</em> to flash firmware and burn a signed <code>KSK-…</code> license onto the ESP32.</li>
-    <li><strong>Detect / bind:</strong> Power the ESP on this router/AP, then use <strong>Detect ESP32</strong> (auto if the ESP reports its license ID, or enter MAC + License ID). Insert Coin unlocks only when licensed <em>and</em> bound.</li>
-    <li><strong>One live ESP per license:</strong> Each license runs on one MAC at a time. Detecting a new board under the same license drops the old MAC.</li>
-    <li><strong>Grace (max 3):</strong> If an ESP dies, seller gives a <em>replacement flasher bundle</em> with the same sealed license. Flash the new ESP → Detect → continues. After 3 grace uses, buy a new license.</li>
-    <li><strong>New license:</strong> Seller License Generator issues a fresh <code>KSK-…</code> after grace is exhausted.</li>
-    <li><strong>Private WiFi:</strong> ESP may auto-join SSIDs containing <strong>CEBJ</strong> / your private SSID (default password often <code>12345678</code> — change it).</li>
+    <li><strong>Offline licenses:</strong> No cloud. Seller uses ESP Flasher + License (or Seller License Generator) to create a signed <code>.ksk</code> license for the ESP.</li>
+    <li><strong>Load → Verify → Bind:</strong> Load the signed <code>.ksk</code>, click <strong>Detect / Verify ESP32 License Compatibility</strong>, then click <strong>BIND ESP32</strong>. Loading alone does not bind. A License ID alone cannot bind.</li>
+    <li><strong>One ESP per license:</strong> Each sealed <code>.ksk</code> authorizes one ESP on this router. A second device cannot inherit that license.</li>
+    <li><strong>Unbind:</strong> Clears the live binding and related slot license flags; the signed <code>.ksk</code> stays on the router. Only the same MAC can reattach.</li>
+    <li><strong>Delete:</strong> Bound devices require confirmation to Unbind-then-delete. Signed KSK history is preserved; coin credit is denied without a live binding.</li>
+    <li><strong>Different ESP:</strong> Buy a new KSK license from your seller. Autopause “Grace Period (sec)” is unrelated and unchanged.</li>
 </ul>
 </div>
 </div>
 
 <div class="card shadow-sm mb-4 border-0" style="background: linear-gradient(135deg, #0e7490, #059669); border: none !important;">
-<div class="card-header border-bottom-0 pt-4 pb-0" style="background: transparent !important;"><h5 class="mb-0 text-white">Need a new license or replacement flasher?</h5></div>
+<div class="card-header border-bottom-0 pt-4 pb-0" style="background: transparent !important;"><h5 class="mb-0 text-white">Need a new ESP license?</h5></div>
 <div class="card-body">
-<p class="text-white mb-1">Contact your CEBJ.NET / KonekSik seller. They will either give you a <strong>replacement flasher bundle</strong> (same license, grace remaining) or a <strong>new KSK license</strong> from the License Generator.</p>
-<p style="color:rgba(255,255,255,0.75); font-size:12px;" class="mb-0">Licenses are offline and bound to this router when Detected — not purchased from FastFi cloud.</p>
+<p class="text-white mb-1">Contact your CEBJ.NET / KonekSik seller for a <strong>new KSK license</strong> from the License Generator. Each license is for one ESP on this router.</p>
+<p style="color:rgba(255,255,255,0.75); font-size:12px;" class="mb-0">Licenses are offline and bound to this router when Detected.</p>
 </div>
 </div>
 
@@ -983,7 +1093,7 @@
 <div id="salesSection" class="hidden">
 
 <!-- Four Metrics Row -->
-<div class="row g-3 mb-4">
+<div class="row g-3 mb-4 ff-metric-row">
     <div class="col-md-3 col-6">
         <div class="card border-0 shadow-sm h-100" style="background:var(--bg-surface); transition: transform 0.2s; cursor:default;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
             <div class="card-body p-3 d-flex align-items-center gap-3">
@@ -1045,14 +1155,29 @@
 <div class="card shadow-sm border-0 h-100 sales-analytics-card" style="background:var(--bg-surface);">
     <div class="card-header card-header-custom border-0 pb-0">
         <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="bar-chart-2" data-size="18"></i> Sales Trend</h5>
-        <div class="card-header-actions">
-            <select class="form-select form-select-sm sales-filter-select" id="chartFilter" onchange="loadSalesChart()" style="width:130px;">
+        <div class="card-header-actions ff-sales-tools">
+            <label class="ff-pick">Scope
+            <select class="form-select form-select-sm sales-filter-select" id="salesVendoFilter" onchange="ffSalesScopeChanged()" title="Applies to the whole Sales page">
+                <option value="all">Overall</option>
+                <option value="main">Main Router</option>
+                <optgroup label="Sales by Sub Vendo" id="salesVendoGroup"></optgroup>
+            </select>
+            </label>
+            <label class="ff-pick">Period
+            <select class="form-select form-select-sm sales-filter-select" id="chartFilter" onchange="loadSalesChart()">
                 <option value="day">This Day</option>
                 <option value="week" selected>This Week</option>
                 <option value="month">This Month</option>
             </select>
+            </label>
             <button onclick="loadAllSales()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1" title="Refresh"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
-            <button onclick="exportSales()" class="btn btn-primary btn-sm d-flex align-items-center gap-1"><i data-icon="download" data-size="14"></i> CSV</button>
+            <label class="ff-pick">Export
+            <select class="form-select form-select-sm sales-filter-select" id="salesExportKind" aria-label="Export format">
+                <option value="pdf">PDF</option>
+                <option value="csv">CSV</option>
+            </select>
+            </label>
+            <button onclick="ffExportSales()" class="btn btn-primary btn-sm d-flex align-items-center gap-1"><i data-icon="download" data-size="14"></i> Export</button>
         </div>
     </div>
     <div class="card-body sales-charts-body">
@@ -1137,13 +1262,13 @@
                 <h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="list" data-size="18"></i> Detailed Sales History</h5>
                 <div class="sales-history-toolbar d-flex align-items-center gap-2 flex-wrap">
                     <label class="ff-date-field">
-                        <span class="ff-date-field__icon"><i data-icon="calendar" data-size="14"></i></span>
-                        <input type="date" id="salesRangeStart" class="form-control form-control-sm ff-date-input" style="width:148px;">
+                        <span class="ff-date-field__label">From</span>
+                        <input type="date" id="salesRangeStart" class="form-control form-control-sm ff-date-input">
                     </label>
                     <span class="sales-date-sep">to</span>
                     <label class="ff-date-field">
-                        <span class="ff-date-field__icon"><i data-icon="calendar" data-size="14"></i></span>
-                        <input type="date" id="salesRangeEnd" class="form-control form-control-sm ff-date-input" style="width:148px;">
+                        <span class="ff-date-field__label">To</span>
+                        <input type="date" id="salesRangeEnd" class="form-control form-control-sm ff-date-input">
                     </label>
                     <button onclick="loadSalesHistory()" class="btn btn-primary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="calendar" data-size="14"></i> Apply</button>
                     <button onclick="clearSalesRange()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="x" data-size="14"></i> Clear</button>
@@ -1177,45 +1302,45 @@
 </div>
 
 </div>
-<!-- REMOTE ACCESS (Tailscale — on-demand, not FastFi VPN) -->
+<!-- REMOTE ACCESS — ZeroTier -->
 <div id="remoteAccessSection" class="hidden">
 <div class="card shadow-sm mb-4 border-0">
-<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="cloud" data-size="18"></i> Remote Access (Tailscale)</h5></div>
+<div class="card-header card-header-custom d-flex align-items-center justify-content-between gap-2 flex-wrap">
+  <h5 class="card-header-title d-flex align-items-center gap-2 mb-0"><i data-icon="cloud" data-size="18"></i> ZeroTier</h5>
+  <div class="form-check form-switch ff-toggle mb-0 d-flex align-items-center gap-2">
+    <input class="form-check-input" type="checkbox" role="switch" id="ztEnableToggle" onchange="ffZeroTierToggle(this)" aria-label="Enable ZeroTier">
+    <label class="form-check-label fw-semibold small" for="ztEnableToggle" id="ztEnableToggleLabel">Disabled</label>
+  </div>
+</div>
 <div class="card-body">
-<p class="text-muted small mb-3">Optional free remote Admin. Start only when you need it, then <strong>Stop</strong> to free RAM. Not connected to FastFi cloud.</p>
-<div id="remoteStatus" class="ff-status-row">
-    <div class="ff-status-item"><span class="ff-status-label">Installed</span><strong id="tsInstalled" class="text-muted">—</strong></div>
-    <div class="ff-status-item"><span class="ff-status-label">Daemon</span><span id="tsDaemon" class="badge bg-secondary">—</span></div>
-    <div class="ff-status-item"><span class="ff-status-label">Tunnel</span><span id="vpnStatus" class="badge bg-danger">Stopped</span></div>
-    <div class="ff-status-item"><span class="ff-status-label">Tailscale IP</span><strong id="vpnIP" style="color:var(--text-primary);">—</strong></div>
-    <div class="ff-status-item wide"><span class="ff-status-label">Admin URL</span><a id="remoteURL" href="#" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;word-break:break-all;">—</a></div>
-</div>
-<p id="tsMessage" class="small text-muted mt-2 mb-0"></p>
-<div class="d-flex flex-wrap gap-2 mt-3">
-    <button type="button" id="tsInstallBtn" onclick="ffTailscaleInstall(this)" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="download" data-size="14"></i> Install Tailscale</button>
-    <button type="button" id="toggleVpnBtn" onclick="ffTailscaleStart(this)" class="btn btn-primary d-inline-flex align-items-center gap-2" data-action="connect"><i data-icon="power" data-size="16"></i> Start remote</button>
-    <button type="button" id="tsStopBtn" onclick="ffTailscaleStop(this)" class="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1"><i data-icon="square" data-size="14"></i> Stop (free RAM)</button>
-    <button type="button" onclick="ffLoadTailscale()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
-</div>
-</div>
-</div>
-
-<div class="card shadow-sm mb-4 border-0">
-<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="key" data-size="18"></i> Auth key (one-time setup)</h5></div>
-<div class="card-body">
-<ol class="small text-muted mb-3 ps-3">
-  <li>Create a free account at <a href="https://login.tailscale.com" target="_blank" rel="noopener">login.tailscale.com</a></li>
-  <li>Install Tailscale app on your phone/laptop and sign in</li>
-  <li>Open <a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noopener">Auth keys</a> → Generate (reusable is fine for your own routers)</li>
-  <li>Paste the key below → <strong>Start remote</strong></li>
+<p class="text-muted small mb-3">Open Admin from your phone on mobile data. Works on any ISP. The service stays off until you turn it on, so it uses no RAM while disabled, and shop internet stays on the normal WAN.</p>
+<ol class="small text-muted mb-3 ps-3" id="ztChecklist">
+  <li>Create a free account at <a href="https://my.zerotier.com" target="_blank" rel="noopener">my.zerotier.com</a>.</li>
+  <li>Create a network and copy its 16-character Network ID.</li>
+  <li>Install the ZeroTier app on your phone and join that same network.</li>
+  <li>Paste the Network ID below and turn <strong>Enable</strong> on.</li>
+  <li>On the ZeroTier website, authorize this router’s <strong>Node ID</strong> and your phone.</li>
+  <li>On the phone, connect ZeroTier, then open the <strong>Admin URL</strong> below.</li>
 </ol>
-<input type="password" class="form-control" id="remoteToken" placeholder="tskey-auth-…" autocomplete="off">
-<div class="form-text">Key is stored on the router only for Start. Prefer Stop when finished so Tailscale is not left running.</div>
-<p id="tsLoginUrlWrap" class="small mt-2 mb-0 hidden">Login URL: <a id="tsLoginUrl" href="#" target="_blank" rel="noopener"></a></p>
+<label class="form-label small fw-semibold mb-1" for="ztNetworkId">Network ID</label>
+<input type="text" class="form-control font-monospace mb-3" id="ztNetworkId" maxlength="16" spellcheck="false" autocomplete="off" placeholder="16 characters from my.zerotier.com">
+<div id="ztStatusRow" class="ff-status-row">
+    <div class="ff-status-item"><span class="ff-status-label">Package</span><strong id="ztInstalled" class="text-muted">—</strong></div>
+    <div class="ff-status-item"><span class="ff-status-label">Service</span><span id="ztDaemon" class="badge bg-secondary">Off</span></div>
+    <div class="ff-status-item"><span class="ff-status-label">Network</span><span id="ztNetStatus" class="badge bg-secondary">—</span></div>
+    <div class="ff-status-item"><span class="ff-status-label">Node ID</span><strong id="ztNodeId" style="color:var(--text-primary);">—</strong></div>
+    <div class="ff-status-item"><span class="ff-status-label">ZeroTier IP</span><strong id="ztIP" style="color:var(--text-primary);">—</strong></div>
+    <div class="ff-status-item wide"><span class="ff-status-label">Admin URL</span><a id="ztAdminURL" href="#" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600;word-break:break-all;">—</a></div>
+</div>
+<p id="ztMessage" class="small text-muted mt-2 mb-0"></p>
+<div class="d-flex flex-wrap gap-2 mt-3">
+    <button type="button" onclick="ffLoadZeroTier()" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"><i data-icon="refresh-cw" data-size="14"></i> Refresh</button>
+</div>
+<p class="form-text mt-3 mb-0">Turn the switch off when you are finished. That stops ZeroTier and frees about 12 MB of RAM.</p>
+</div>
 </div>
 </div>
 
-</div>
 <!-- NETWORK -->
 <div id="networkSection" class="hidden">
 <ul class="nav nav-pills mb-3" style="font-size:13px; gap:6px;">
@@ -1345,6 +1470,7 @@
         </div>
     </div>
     <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveSSID()"><i data-icon="save" data-size="16"></i> Save SSID</button>
+    <p class="text-muted small mt-2 mb-0">Change these names anytime — each Save applies and rebroadcasts the public SSIDs.</p>
 </div>
 </div>
 
@@ -1376,7 +1502,7 @@
 <div id="settingsSection" class="hidden">
 
 <div class="card shadow-sm mb-4 border-0">
-<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="key" data-size="18"></i> KonekSik-Fi License</h5></div>
+<div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="key" data-size="18"></i> CEBJ.NET Licence</h5></div>
 <div class="card-body">
     
     <div class="d-flex flex-column gap-1 mb-3 p-2 border border-secondary border-opacity-25 rounded" style="background-color: var(--bg-sidebar-hover);">
@@ -1404,32 +1530,50 @@
     
     <div id="licenseActivation" class="row gx-2 gy-2 align-items-end">
         <div class="col-sm-8 col-md-6 col-lg-5">
-            <label class="text-muted fw-semibold" style="font-size:12px; margin-bottom:4px; display:block;">Activate New License</label>
-            <input type="text" class="form-control" id="licenseKey" placeholder="Enter License Code (e.g. PRO-1234)">
+            <label class="text-muted fw-semibold" style="font-size:12px; margin-bottom:4px; display:block;">Activate Licence</label>
+            <input type="text" class="form-control" id="licenseKey" placeholder="Paste full RTR offline token (Copy paste token)">
         </div>
         <div class="col-auto">
-            <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="activateLicense()"><i data-icon="check-circle" data-size="16"></i> Activate License</button>
+            <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="activateLicense()"><i data-icon="check-circle" data-size="16"></i> Activate Licence</button>
         </div>
     </div>
 
     <div id="licenseRevocation" class="mt-3" style="display:none;">
-        <button id="revokeLicenseBtn" class="btn btn-outline-danger d-inline-flex align-items-center gap-2" onclick="removeRouterLicense()"><i data-icon="x-circle" data-size="16"></i> Remove License</button>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <button id="revokeLicenseBtn" class="btn btn-outline-danger d-inline-flex align-items-center gap-2" onclick="removeRouterLicense()"><i data-icon="x-circle" data-size="16"></i> Remove Licence</button>
+            <button id="replaceLicenseBtn" type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2" onclick="showReplaceLicense()"><i data-icon="plus-circle" data-size="16"></i> Add / Replace Licence</button>
+        </div>
+        <p class="text-muted small mt-2 mb-0">Remove only deactivates this router (sales, vouchers, WiFi stay). You can activate the same or a different RTR token anytime.</p>
+    </div>
+
+    <div id="licenseReplacePanel" class="mt-3 p-3 border border-primary border-opacity-25 rounded" style="display:none; background:rgba(59,130,246,0.06);">
+        <label class="text-muted fw-semibold" style="font-size:12px; margin-bottom:4px; display:block;">Paste a different RTR offline token</label>
+        <div class="row g-2 align-items-end">
+            <div class="col-sm-8 col-md-6 col-lg-5">
+                <input type="text" class="form-control" id="replaceLicenseKey" placeholder="Paste full RTR offline token">
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="replaceRouterLicense()"><i data-icon="check-circle" data-size="16"></i> Activate This Licence</button>
+            </div>
+            <div class="col-auto">
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="hideReplaceLicense()">Cancel</button>
+            </div>
+        </div>
+        <p id="licenseReplaceResult" class="mt-2 mb-0 fw-semibold" style="font-size:13px;"></p>
     </div>
 
     <div class="mt-3 border-top border-secondary border-opacity-25 pt-3">
         <div class="row g-2 align-items-center mb-2">
             <div class="col-auto flex-grow-1" style="max-width:320px;">
-                <input type="text" class="form-control form-control-sm" id="recoverLicenseKey" placeholder="License key (optional — for rebind to a new device ID)">
+                <input type="text" class="form-control form-control-sm" id="recoverLicenseKey" placeholder="Paste same RTR… token (required after reflash)">
             </div>
             <div class="col-auto">
-                <button id="recoverLicenseBtn" class="btn btn-outline-info d-inline-flex align-items-center gap-2" onclick="recoverLicense()"><i data-icon="refresh-cw" data-size="16"></i> Recover License (after reflash)</button>
+                <button id="recoverLicenseBtn" class="btn btn-outline-info d-inline-flex align-items-center gap-2" onclick="recoverLicense()"><i data-icon="refresh-cw" data-size="16"></i> Recover Licence (after reflash)</button>
             </div>
         </div>
-        <small class="d-block text-muted mt-1" style="font-size:11px;">Reflashed the SD card or replaced the image?
-        Leave the key blank to re-bind this device's existing license from the KonekSik-Fi Cloud (matched by Device ID, no
-        key needed). Paste your license key instead to re-bind it to this device's current ID — use this if the
-        Device ID changed (e.g. board replacement) or the key was bound under an older ID. The device must be
-        online and the key must have been previously activated.</small>
+        <small class="d-block text-muted mt-1" style="font-size:11px;">Offline only — no cloud. A production license is bound to one Device ID. The same Device ID can activate up to <strong>3</strong> times, including Recover after a reflash of this router.
+        Recover does not move a license to a different Device ID. A different router needs a new token from the seller.
+        Stock blank tokens are not customer licenses.</small>
         <p id="licenseRecoverResult" class="mt-2 fw-semibold" style="font-size:13px;"></p>
     </div>
 
@@ -1581,7 +1725,7 @@
         <label class="form-check-label" for="pauseLimitEnabled">Enable Global Pause Limit</label>
     </div>
 </div>
-<p class="ff-desc mb-3">Limit how many times a client can pause their session globally.</p>
+<p class="ff-desc mb-3">When enabled, each client can pause only this many times (shown on the captive portal as <strong>PAUSE (N Left)</strong>). Each pause deducts 1; at 0 they cannot pause. Coin Rates pause value of <strong>0</strong> uses this global limit.</p>
 <div class="row gx-2 gy-2 align-items-end">
     <div class="col-sm-8 col-md-6 col-lg-3">
         <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Pause Limit (times)</label>
@@ -1598,7 +1742,13 @@
 <div class="card shadow-sm mb-4 border-0">
 <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="timer" data-size="18"></i> Auto-Pause Settings</h5></div>
 <div class="card-body">
-<p class="card-subtitle mb-3 text-muted">Automatically pause sessions when clients disconnect from WiFi</p>
+<p class="card-subtitle mb-3 text-muted">
+  <strong>Auto-Pause</strong> (WiFi leave): when a paying client disconnects / goes out of coverage,
+  remaining time is banked and internet is cut. When the <em>same MAC</em> rejoins the SSID,
+  time auto-resumes if Auto-Resume is on.
+  <br><strong>Manual Pause</strong> (portal Pause button) is separate — it never auto-resumes;
+  the customer must tap Resume.
+</p>
 <div class="d-flex flex-wrap gap-4 mb-3">
     <div class="form-check form-switch ff-toggle">
         <input class="form-check-input" type="checkbox" role="switch" id="autopauseEnabled">
@@ -1612,12 +1762,13 @@
 <div class="row gx-2 gy-2 align-items-end">
     <div class="col-sm-8 col-md-6 col-lg-3">
         <label class="form-label text-muted fw-bold mb-1" style="font-size:11px; letter-spacing:0.5px; text-transform:uppercase;">Grace Period (sec)</label>
-        <input type="number" class="form-control" id="autopauseGracePeriod" value="60" min="10" max="600">
+        <input type="number" class="form-control" id="autopauseGracePeriod" value="15" min="10" max="600">
     </div>
     <div class="col-auto">
         <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="saveAutopauseConfig()"><i data-icon="save" data-size="16"></i> Save Config</button>
     </div>
 </div>
+<small class="d-block text-muted mt-2" style="font-size:11px;">Default ON. Event-driven (hostapd connect/disconnect) — not a busy CPU poller. Grace cancels if the client returns before it ends.</small>
 </div>
 </div>
 
@@ -1644,69 +1795,111 @@
 
   <!-- LEFT — Portal Configuration -->
   <div class="cp-config-col">
-    <div class="d-flex align-items-center justify-content-between gap-2 mb-3 flex-wrap">
-      <h5 class="mb-0 fw-bold d-flex align-items-center gap-2"><i data-icon="settings" data-size="18"></i> Portal Configuration</h5>
-      <span id="cpSyncPill" class="cp-sync-pill">Synced</span>
+    <div class="cp-config-hero mb-3">
+      <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+        <div>
+          <p class="cp-config-kicker mb-1">Guest branding</p>
+          <h5 class="mb-0 fw-bold d-flex align-items-center gap-2"><i data-icon="settings" data-size="18"></i> Portal Configuration</h5>
+        </div>
+        <span id="cpSyncPill" class="cp-sync-pill">Synced</span>
+      </div>
+      <p class="cp-config-lead mb-0 mt-2">Upload banner and sounds used on the captive portal. Live Preview (right) only shows a local banner pick.</p>
     </div>
 
-    <h6 class="fw-bold mb-1">Banner upload</h6>
-    <p class="text-muted mb-2" style="font-size:13px;">Recommended 800×200, JPEG/PNG (max 5MB). Live Preview updates from this pick only.</p>
-    <div class="row gx-2 gy-2 align-items-center mb-1">
-      <div class="col-sm-8">
-        <input class="form-control" type="file" id="bannerFile" accept="image/jpeg,image/png">
+    <div class="cp-asset-card mb-3">
+      <div class="cp-asset-card__head">
+        <span class="cp-asset-num">1</span>
+        <div>
+          <h6 class="cp-asset-title mb-0">Banner</h6>
+          <p class="cp-asset-help mb-0">Recommended 800×200 · JPEG/PNG · max 5MB</p>
+        </div>
       </div>
-      <div class="col-auto">
-        <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="uploadBanner()"><i data-icon="upload-cloud" data-size="16"></i> Upload</button>
+      <div class="d-flex align-items-start gap-2 flex-wrap mb-2">
+        <img id="cpBannerThumb" class="cp-thumb" alt="Selected banner thumbnail">
+        <div class="ff-file-picker flex-grow-1">
+          <input class="ff-file-input" type="file" id="bannerFile" accept="image/jpeg,image/png" onchange="ffPortalFileChanged(this,'bannerFileName')">
+          <button type="button" class="btn btn-sm ff-file-btn d-inline-flex align-items-center gap-1" onclick="document.getElementById('bannerFile').click()">
+            <i data-icon="image" data-size="14"></i> Choose file
+          </button>
+          <span id="bannerFileName" class="ff-file-name">No file chosen</span>
+        </div>
       </div>
-      <div class="col-auto">
-        <button class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" type="button" onclick="restoreDefaultBanner()"><i data-icon="rotate-ccw" data-size="16"></i> Restore Default</button>
+      <div class="d-flex flex-wrap gap-2 mb-2">
+        <button class="btn btn-primary btn-sm d-inline-flex align-items-center gap-2" onclick="uploadBanner()"><i data-icon="upload-cloud" data-size="16"></i> Upload</button>
+        <button class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2" type="button" onclick="restoreDefaultBanner()"><i data-icon="rotate-ccw" data-size="16"></i> Restore Default</button>
       </div>
+      <p id="currentBannerStatus" class="small mb-1 fw-semibold text-muted">Using Default-Banner.png</p>
+      <p id="bannerResult" class="mb-0 fw-semibold" style="font-size:12px;"></p>
     </div>
-    <img id="cpBannerThumb" class="cp-thumb" alt="Selected banner thumbnail">
-    <p id="currentBannerStatus" class="small mb-1 mt-2 fw-semibold text-muted">Using Default-Banner.png</p>
-    <p id="bannerResult" class="mt-1 mb-3 fw-semibold" style="font-size:12px;"></p>
 
-    <hr class="border-secondary border-opacity-25 my-3">
+    <div class="cp-asset-card mb-3">
+      <div class="cp-asset-card__head">
+        <span class="cp-asset-num">2</span>
+        <div>
+          <h6 class="cp-asset-title mb-0">Insert Coin music</h6>
+          <p class="cp-asset-help mb-0">MP3 only · Live Preview plays a local pending pick</p>
+        </div>
+      </div>
+      <div class="ff-file-picker mb-2">
+        <input class="ff-file-input" type="file" id="audioFile_bg" accept=".mp3,audio/mpeg" onchange="ffPortalFileChanged(this,'audioFileName_bg')">
+        <button type="button" class="btn btn-sm ff-file-btn d-inline-flex align-items-center gap-1" onclick="document.getElementById('audioFile_bg').click()">
+          <i data-icon="upload" data-size="14"></i> Choose file
+        </button>
+        <span id="audioFileName_bg" class="ff-file-name">No file chosen</span>
+        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1 ms-auto" id="btnUpload_bg" onclick="uploadAudio('bg')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
+      </div>
+      <div class="cp-audio-box">
+        <span class="cp-audio-label">Saved on appliance</span>
+        <audio id="audioPreview_bg" controls src="/audio/insert.mp3" class="cp-audio"></audio>
+      </div>
+      <p id="audioResult_bg" class="mb-0 mt-2 fw-semibold" style="font-size:12px;"></p>
+    </div>
 
-    <h6 class="fw-bold mb-1">Insert Coin background music</h6>
-    <p class="text-muted mb-2" style="font-size:13px;">MP3 only. Live Preview plays a local pending pick only (not the saved appliance file).</p>
-    <div class="row gx-2 gy-2 align-items-center mb-2">
-      <div class="col-sm-8">
-        <input class="form-control form-control-sm" type="file" id="audioFile_bg" accept=".mp3,audio/mpeg">
+    <div class="cp-asset-card mb-3">
+      <div class="cp-asset-card__head">
+        <span class="cp-asset-num">3</span>
+        <div>
+          <h6 class="cp-asset-title mb-0">Coin inserted sound</h6>
+          <p class="cp-asset-help mb-0">Short MP3 played when a coin is accepted</p>
+        </div>
       </div>
-      <div class="col-auto">
-        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" id="btnUpload_bg" onclick="uploadAudio('bg')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
+      <div class="ff-file-picker mb-2">
+        <input class="ff-file-input" type="file" id="audioFile_coin" accept=".mp3,audio/mpeg" onchange="ffPortalFileChanged(this,'audioFileName_coin')">
+        <button type="button" class="btn btn-sm ff-file-btn d-inline-flex align-items-center gap-1" onclick="document.getElementById('audioFile_coin').click()">
+          <i data-icon="upload" data-size="14"></i> Choose file
+        </button>
+        <span id="audioFileName_coin" class="ff-file-name">No file chosen</span>
+        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1 ms-auto" id="btnUpload_coin" onclick="uploadAudio('coin')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
       </div>
+      <div class="cp-audio-box">
+        <span class="cp-audio-label">Saved on appliance</span>
+        <audio id="audioPreview_coin" controls src="/audio/coin.mp3" class="cp-audio"></audio>
+      </div>
+      <p id="audioResult_coin" class="mb-0 mt-2 fw-semibold" style="font-size:12px;"></p>
     </div>
-    <div class="border border-secondary border-opacity-25 rounded p-2 mb-2" style="background-color: var(--bg-sidebar-hover); max-width: 400px;">
-      <span class="text-uppercase text-muted fw-bold" style="font-size:10px; letter-spacing:0.5px;">Saved on appliance</span>
-      <audio id="audioPreview_bg" controls src="/audio/insert.mp3" style="width: 100%; height: 30px;"></audio>
-    </div>
-    <p id="audioResult_bg" class="mb-3 fw-semibold" style="font-size:12px;"></p>
 
-    <h6 class="fw-bold mb-1">Coin inserted sound</h6>
-    <div class="row gx-2 gy-2 align-items-center mb-2">
-      <div class="col-sm-8">
-        <input class="form-control form-control-sm" type="file" id="audioFile_coin" accept=".mp3,audio/mpeg">
+    <div class="cp-asset-card mb-0">
+      <div class="cp-asset-card__head">
+        <span class="cp-asset-num">4</span>
+        <div>
+          <h6 class="cp-asset-title mb-0">Done / Success sound</h6>
+          <p class="cp-asset-help mb-0">Played when a session starts successfully</p>
+        </div>
       </div>
-      <div class="col-auto">
-        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" id="btnUpload_coin" onclick="uploadAudio('coin')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
+      <div class="ff-file-picker mb-2">
+        <input class="ff-file-input" type="file" id="audioFile_success" accept=".mp3,audio/mpeg" onchange="ffPortalFileChanged(this,'audioFileName_success')">
+        <button type="button" class="btn btn-sm ff-file-btn d-inline-flex align-items-center gap-1" onclick="document.getElementById('audioFile_success').click()">
+          <i data-icon="upload" data-size="14"></i> Choose file
+        </button>
+        <span id="audioFileName_success" class="ff-file-name">No file chosen</span>
+        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1 ms-auto" id="btnUpload_success" onclick="uploadAudio('success')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
       </div>
+      <div class="cp-audio-box">
+        <span class="cp-audio-label">Saved on appliance</span>
+        <audio id="audioPreview_success" controls src="/audio/success.mp3" class="cp-audio"></audio>
+      </div>
+      <p id="audioResult_success" class="mb-0 mt-2 fw-semibold" style="font-size:12px;"></p>
     </div>
-    <audio id="audioPreview_coin" controls src="/audio/coin.mp3" class="mb-2" style="width: 100%; max-width:400px; height: 30px;"></audio>
-    <p id="audioResult_coin" class="mb-3 fw-semibold" style="font-size:12px;"></p>
-
-    <h6 class="fw-bold mb-1">Done / Success sound</h6>
-    <div class="row gx-2 gy-2 align-items-center mb-2">
-      <div class="col-sm-8">
-        <input class="form-control form-control-sm" type="file" id="audioFile_success" accept=".mp3,audio/mpeg">
-      </div>
-      <div class="col-auto">
-        <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" id="btnUpload_success" onclick="uploadAudio('success')"><i data-icon="upload-cloud" data-size="14"></i> Upload</button>
-      </div>
-    </div>
-    <audio id="audioPreview_success" controls src="/audio/success.mp3" class="mb-2" style="width: 100%; max-width:400px; height: 30px;"></audio>
-    <p id="audioResult_success" class="mb-0 fw-semibold" style="font-size:12px;"></p>
   </div>
 
   <!-- RIGHT — Live Preview -->
@@ -1801,7 +1994,28 @@
                 <p class="text-muted">Current Version: <strong id="currentVersionLabel">--</strong></p>
             </div>
 
-            <div style="max-width: 500px; margin: 0 auto;">
+            <div id="otaReleaseCard" class="ota-release mx-auto">
+                <div class="ota-release-top">
+                    <div class="ota-ver">
+                        <span>This router</span>
+                        <strong id="otaCurrentVersion">--</strong>
+                    </div>
+                    <div class="ota-ver">
+                        <span>Latest</span>
+                        <strong id="otaLatestVersion">--</strong>
+                    </div>
+                    <div class="ota-ver ota-ver-status">
+                        <span>Status</span>
+                        <strong id="otaUpdateStatus" class="ota-status is-idle">Not checked</strong>
+                    </div>
+                </div>
+                <div class="ota-notes-label">What changed</div>
+                <ul id="otaReleaseNotes" class="ota-notes">
+                    <li class="is-empty">Check for updates to load what changed.</li>
+                </ul>
+            </div>
+
+            <div class="ota-actions mx-auto">
                 <div class="d-flex gap-2 justify-content-center mb-3">
                     <button id="btnOTA_Check" class="btn btn-primary d-flex align-items-center gap-2"><i data-icon="search" data-size="18"></i> Check for Updates</button>
                     <button id="btnOTA_Proceed" class="btn btn-success d-flex align-items-center gap-2" disabled><i data-icon="zap" data-size="18"></i> Apply Update Now</button>
@@ -1815,28 +2029,58 @@
                     <p id="otaProgressLabel" class="text-muted small mb-0">Starting download...</p>
                 </div>
             </div>
+
+            <div id="otaScheduleBlock" class="ota-extra text-start mx-auto">
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="checkbox" id="otaAutoToggle">
+                    <label class="form-check-label" for="otaAutoToggle">Automatic updates (every day at 2 PM)</label>
+                </div>
+                <p id="otaScheduleStatus" class="text-muted small mb-0">Scheduled time: 2:00 PM.</p>
+            </div>
+
+            <div id="otaRollbackBlock" class="ota-extra text-start mx-auto">
+                <h6 class="mb-1">Install a different version</h6>
+                <p class="text-muted small">Go back to an earlier release if a new one causes problems. Settings, sales and vouchers are kept. Select a release below to download and install it. Automatic updates are turned off so the router stays on the selected version.</p>
+                <label class="form-label small mb-1" for="otaReleaseSelect">GitHub release</label>
+                <select id="otaReleaseSelect" class="form-select form-select-sm mb-2">
+                    <option value="">Loading releases…</option>
+                </select>
+                <div id="otaSelectedDetail" class="ota-selected small text-muted mb-2">Select a release, then Load. Loading does not install firmware.</div>
+                <div class="d-flex gap-2 flex-wrap mb-2">
+                    <button type="button" id="btnOTA_Load" class="btn btn-outline-primary btn-sm" disabled>Load</button>
+                    <button type="button" id="btnOTA_Download" class="btn btn-primary btn-sm" disabled>Download</button>
+                    <button type="button" id="btnOTA_Install" class="btn btn-warning btn-sm" disabled>Install this version</button>
+                </div>
+                <p id="otaRollbackStatus" class="small text-muted mb-0"></p>
+            </div>
         </div>
     </div>
 
     <div class="card shadow-sm mb-4 border-0">
         <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="upload-cloud" data-size="18"></i> KonekSik Firmware</h5></div>
         <div class="card-body">
-            <p class="text-muted small mb-2">Update <strong>KonekSik</strong> using the standard OpenWrt sysupgrade process. Upload a KonekSik/OpenWrt <code>.bin</code> built for <code>ruijie,rg-ew1200g-pro-v1.1</code>.</p>
-            <p class="text-muted small">This path does <strong>not</strong> install official Ruijie/Reyee OEM packages. Use the OEM section below to restore ReyeeOS.</p>
+            <p class="text-muted small mb-2"><strong>Manual Flash Authorization required.</strong> Normal customers should use <strong>System OTA Update</strong>. System OTA does not require Flash Authorization.</p>
+            <p class="text-muted small">This path does <strong>not</strong> install official Ruijie/Reyee OEM packages. A clean flash <strong>resets settings</strong>. Use the OEM section below to restore ReyeeOS.</p>
             <div class="row g-2 align-items-end mb-3">
                 <div class="col-md-8">
                     <label class="form-label small mb-1">KonekSik sysupgrade file (.bin)</label>
-                    <input type="file" id="ffFirmwareFile" class="form-control form-control-sm" accept=".bin,application/octet-stream">
+                    <input type="file" id="ffFirmwareFile" class="form-control form-control-sm" accept=".bin,application/octet-stream" onchange="ffOnFirmwareFilePicked('koneksik')">
                 </div>
                 <div class="col-md-4">
                     <button class="btn btn-warning btn-sm w-100" onclick="ffUploadFirmware()">Upload KonekSik Firmware</button>
                 </div>
             </div>
+            <div class="mb-2">
+                <label class="form-label small mb-1">Flash Authorization</label>
+                <input type="file" id="ffFwAuthFile" class="form-control form-control-sm" accept=".json,application/json,text/plain" onchange="ffLoadFlashAuthFile(this, 'koneksik')">
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm mb-2" onclick="ffVerifyFlashAuth('koneksik')">Verify Authorization</button>
+            <p id="ffFwAuthStatus" class="small text-muted mb-2">Authorization status: Not verified</p>
             <div class="form-check mb-2">
                 <input class="form-check-input" type="checkbox" id="ffFwConfirmStock">
                 <label class="form-check-label small" for="ffFwConfirmStock">I understand flashing replaces the running firmware and reboots the router</label>
             </div>
-            <button class="btn btn-danger btn-sm" id="ffFwFlashBtn" onclick="ffFlashUploadedFirmware()" disabled>Flash KonekSik firmware (reboot)</button>
+            <button class="btn btn-danger btn-sm" id="ffFwFlashBtn" onclick="ffFlashUploadedFirmware()" disabled>Flash KonekSik Firmware</button>
             <p id="ffFwStatus" class="small text-muted mt-2 mb-0">No KonekSik firmware staged.</p>
             <p class="text-muted mt-2 mb-0" style="font-size:11px;"><strong>Safety:</strong> Keep a backup first. OpenWrt image metadata validation still applies on this path.</p>
         </div>
@@ -1845,18 +2089,25 @@
     <div class="card shadow-sm mb-4 border-0 border-danger" style="border-width:1px !important;">
         <div class="card-header card-header-custom"><h5 class="card-header-title d-flex align-items-center gap-2"><i data-icon="shield" data-size="18"></i> OEM Firmware — ReyeeOS</h5></div>
         <div class="card-body">
-            <p class="text-muted small mb-2">Restore official <strong>Ruijie/Reyee</strong> firmware (ReyeeOS) on RG-EW1200G PRO. Supported package example: <code>EW_3.0(1)B11P313_*_encrypto.tar.gz</code>.</p>
+            <p class="text-muted small mb-2">Restore official <strong>Ruijie/Reyee</strong> firmware (ReyeeOS) on RG-EW1200G PRO. Prefer decrypted <code>rgos.bin</code> (no TFTP). Official <code>EW_3.0(1)B11P313_*_encrypto.tar.gz</code> is also accepted and validates in the background.</p>
+            <p class="text-muted small mb-2"><strong>Manual Flash Authorization required.</strong> This authorization must allow OEM / ReyeeOS Restore.</p>
             <div class="alert alert-warning py-2 small mb-3">Installing OEM firmware will replace KonekSik and reboot the router. Only use official firmware intended for this device. Factory / product_info / U-Boot are not written by this feature.</div>
             <div class="row g-2 align-items-end mb-3">
                 <div class="col-md-8">
                     <label class="form-label small mb-1">Official OEM package (.tar.gz) or decrypted rgos.bin</label>
-                    <input type="file" id="ffOemFirmwareFile" class="form-control form-control-sm" accept=".tar.gz,.gz,.bin,application/gzip,application/octet-stream">
+                    <input type="file" id="ffOemFirmwareFile" class="form-control form-control-sm" accept=".tar.gz,.gz,.bin,application/gzip,application/octet-stream" onchange="ffOnFirmwareFilePicked('oem')">
                 </div>
                 <div class="col-md-4">
                     <button class="btn btn-outline-primary btn-sm w-100" onclick="ffUploadOemFirmware()">Upload OEM Firmware</button>
                 </div>
             </div>
             <div id="ffOemReport" class="small mb-3" style="display:none; background:rgba(0,0,0,0.04); border-radius:6px; padding:12px;"></div>
+            <div class="mb-2">
+                <label class="form-label small mb-1">Flash Authorization</label>
+                <input type="file" id="ffOemAuthFile" class="form-control form-control-sm" accept=".json,application/json,text/plain" onchange="ffLoadFlashAuthFile(this, 'oem')">
+            </div>
+            <button type="button" class="btn btn-outline-primary btn-sm mb-2" onclick="ffVerifyFlashAuth('oem')">Verify Authorization</button>
+            <p id="ffOemAuthStatus" class="small text-muted mb-2">Authorization status: Not verified</p>
             <div class="form-check mb-2">
                 <input class="form-check-input" type="checkbox" id="ffOemConfirm">
                 <label class="form-check-label small" for="ffOemConfirm">I understand this will erase KonekSik and install ReyeeOS on the firmware partition</label>
@@ -1971,7 +2222,7 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- FASTFI SHIELD -->
+<!-- KonekSik Shield -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="shieldSection" class="hidden">
     <nav aria-label="breadcrumb" class="mb-2">
@@ -2064,23 +2315,6 @@
 </div>
 
 <!-- ===== EXTENDED FEATURE SECTIONS ===== -->
-<div id="plansSection" class="hidden">
-  <div class="d-flex justify-content-end mb-3">
-    <button class="btn btn-primary btn-sm" onclick="ffOpenPlanModal()">Add Plan</button>
-  </div>
-  <div class="card shadow-sm border-0 mb-3">
-    <div class="card-header card-header-custom">
-      <h5 class="card-header-title mb-0">Subscription / timed plans</h5>
-    </div>
-    <div class="card-body table-responsive p-0">
-      <table class="table table-hover align-middle mb-0 ff-even-table"><thead><tr>
-        <th>Name</th><th>Price</th><th>Duration</th><th>Data</th><th>Profile</th><th>Pause</th><th>Actions</th>
-      </tr></thead>
-      <tbody id="ffPlansTable"><tr><td colspan="7" class="text-muted text-center">Loading…</td></tr></tbody></table>
-    </div>
-  </div>
-</div>
-
 <div id="bandwidthSection" class="hidden">
   <div class="d-flex justify-content-end mb-2">
     <button class="btn btn-primary btn-sm" onclick="ffOpenProfileModal()">Add Profile</button>
@@ -2105,23 +2339,6 @@
   <table class="d-none"><tbody id="ffProfilesTable"></tbody></table>
 </div>
 
-<div id="planClientsSection" class="hidden">
-  <div class="d-flex justify-content-end mb-3">
-    <button class="btn btn-primary btn-sm" onclick="ffOpenClientModal()">Add Client</button>
-  </div>
-  <div class="card shadow-sm border-0 mb-3">
-    <div class="card-header card-header-custom">
-      <h5 class="card-header-title mb-0">Households / named customers</h5>
-    </div>
-    <div class="card-body table-responsive p-0">
-      <table class="table table-hover align-middle mb-0 ff-even-table">
-        <thead><tr><th>Name</th><th>Contact</th><th>Plan</th><th>Status</th><th>Devices</th><th>Actions</th></tr></thead>
-        <tbody id="ffPlanClientsTable"><tr><td colspan="6" class="text-muted text-center">Loading…</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
 <div id="devicesSection" class="hidden">
   <h3 class="section-title mb-3">Connected Devices</h3>
   <div class="card shadow-sm border-0 mb-3">
@@ -2136,6 +2353,10 @@
   </div>
   <div class="card shadow-sm border-0 mb-3">
     <div class="card-header card-header-custom"><h5 class="card-header-title mb-0">MAC Blocklist</h5></div>
+    <details class="ff-guide">
+      <summary>What happens after a block</summary>
+      <p class="mb-0">The device is dropped by the router. It cannot browse, and a voucher or coins will not put it online, until you remove that MAC from this list. Other customers stay connected.</p>
+    </details>
     <div class="card-body">
       <div class="row g-2 mb-3">
         <div class="col-md-3"><input id="ffBlockMac" class="form-control form-control-sm" placeholder="AA:BB:CC:DD:EE:FF"></div>
@@ -2288,44 +2509,6 @@
   </div>
 </div>
 
-<!-- Plan modal -->
-<div id="ffPlanModal" class="modal-overlay" style="display:none;z-index:9990;">
-  <div class="modal-card" style="max-width:460px;">
-    <h3 id="ffPlanModalTitle" style="margin-bottom:12px;">Plan</h3>
-    <input type="hidden" id="ffPlanId">
-    <div class="mb-2"><label class="form-label small fw-semibold">Plan name</label><input id="ffPlanName" class="form-control form-control-sm" placeholder="Day Pass"></div>
-    <div class="row g-2 mb-2">
-      <div class="col-6"><label class="form-label small fw-semibold">Price (₱)</label><input id="ffPlanPrice" type="number" min="0" step="1" class="form-control form-control-sm"></div>
-      <div class="col-6"><label class="form-label small fw-semibold">Duration (min)</label><input id="ffPlanDuration" type="number" min="1" class="form-control form-control-sm"></div>
-    </div>
-    <div class="row g-2 mb-2">
-      <div class="col-6"><label class="form-label small fw-semibold">Data MB (0=∞)</label><input id="ffPlanData" type="number" min="0" class="form-control form-control-sm"></div>
-      <div class="col-6"><label class="form-label small fw-semibold">Pause limit</label><input id="ffPlanPause" type="number" min="0" class="form-control form-control-sm"></div>
-    </div>
-    <div class="mb-3"><label class="form-label small fw-semibold">Bandwidth profile</label><select id="ffPlanProfile" class="form-select form-select-sm"><option value="0">None</option></select></div>
-    <div class="d-flex gap-2 justify-content-end">
-      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="ffClosePlanModal()">Cancel</button>
-      <button type="button" class="btn btn-primary btn-sm" onclick="ffSavePlan()">Save Plan</button>
-    </div>
-  </div>
-</div>
-
-<!-- Plan client modal -->
-<div id="ffClientModal" class="modal-overlay" style="display:none;z-index:9990;">
-  <div class="modal-card" style="max-width:460px;">
-    <h3 id="ffClientModalTitle" style="margin-bottom:12px;">Plan Client</h3>
-    <input type="hidden" id="ffClientId">
-    <div class="mb-2"><label class="form-label small fw-semibold">Client name</label><input id="ffClientName" class="form-control form-control-sm" placeholder="Juan dela Cruz"></div>
-    <div class="mb-2"><label class="form-label small fw-semibold">Contact</label><input id="ffClientContact" class="form-control form-control-sm" placeholder="09xx…"></div>
-    <div class="mb-2"><label class="form-label small fw-semibold">Plan</label><select id="ffClientPlan" class="form-select form-select-sm"><option value="0">No plan</option></select></div>
-    <div class="mb-3"><label class="form-label small fw-semibold">Notes</label><textarea id="ffClientNotes" class="form-control form-control-sm" rows="2"></textarea></div>
-    <div class="d-flex gap-2 justify-content-end">
-      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="ffCloseClientModal()">Cancel</button>
-      <button type="button" class="btn btn-primary btn-sm" onclick="ffSaveClient()">Save Client</button>
-    </div>
-  </div>
-</div>
-
 <!-- Modern alert (OK only) -->
 <div id="ffAlertModal" class="modal-overlay" style="display:none;z-index:9996;">
   <div class="modal-card" style="max-width:440px;">
@@ -2334,6 +2517,20 @@
     <div class="d-flex gap-2 justify-content-end">
       <button type="button" class="btn btn-primary btn-sm" id="ffAlertOk" onclick="ffCloseAlert()">OK</button>
     </div>
+  </div>
+</div>
+
+<!-- Flash lock: no close control — blocks Admin until write/reboot -->
+<div id="ffFlashLockOverlay" class="ff-flash-lock" style="display:none;" role="alertdialog" aria-modal="true" aria-labelledby="ffFlashLockTitle">
+  <div class="ff-flash-lock-card">
+    <div class="ff-flash-lock-spinner" aria-hidden="true"></div>
+    <h3 id="ffFlashLockTitle">Flashing firmware</h3>
+    <p id="ffFlashLockMsg" class="text-muted mb-3" style="font-size:14px;">Do not close this tab, refresh, click around, or unplug the router.</p>
+    <div class="progress mb-2">
+      <div id="ffFlashLockBar" class="progress-bar progress-bar-striped progress-bar-animated bg-warning" role="progressbar" style="width:8%;"></div>
+    </div>
+    <p id="ffFlashLockPct" class="small fw-semibold mb-1">8%</p>
+    <p id="ffFlashLockHint" class="small text-muted mb-0">Starting flash…</p>
   </div>
 </div>
 
@@ -2446,9 +2643,11 @@
 </div> <!-- flex-grow-1 content area -->
 </div> <!-- main-column -->
 
-    <script src="/admin.js?v=62"></script>
-    <script src="/js/portal-live-preview.js?v=3"></script>
-    <script src="/admin-ext.js?v=23"></script>
+    <script src="/admin.js?v=67"></script>
+    <script src="/js/portal-live-preview.js?v=42"></script>
+    <script src="/admin-ext.js?v=46"></script>
+    <script src="/admin-boot.js?v=41"></script>
+    <script src="/admin-license.js?v=1"></script>
 </div> <!-- adminPanel -->
 </body>
 </html>

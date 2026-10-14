@@ -19,12 +19,23 @@
     return fetch(url, init).then((r) => r.json());
   };
 
+  const _ffApiFetch = window.fetch.bind(window);
+  window.fetch = function (url, opts) {
+    if (typeof url === "string" && /[?&]action=(sales_totals|sales_data|sales_history|delete_sales|sales_report)(&|$)/.test(url) && url.indexOf("vendo=") === -1) {
+      const sel = document.getElementById("salesVendoFilter");
+      url += "&vendo=" + encodeURIComponent((sel && sel.value) || "all");
+    }
+    return _ffApiFetch(url, opts);
+  };
+
   const toast = (m, t) => {
     if (typeof showToast === "function") showToast(m, t || "info");
     else console.log(t, m);
   };
 
   const peso = (n) => "₱" + Number(n || 0).toLocaleString();
+  // Lua json.encode used to emit {} for empty lists — never trust || [] alone.
+  const asArr = (v) => (Array.isArray(v) ? v : []);
 
   // ---- Auth: KonekSik-style login + working logout ----
   function ffShowLoginScreen() {
@@ -157,9 +168,9 @@
   window.hideAll = function () {
     if (typeof _hideAll === "function") _hideAll();
     [
-      "plansSection",
+      
       "bandwidthSection",
-      "planClientsSection",
+      
       "devicesSection",
       "waitingSection",
       "radioSection",
@@ -179,9 +190,9 @@
     if (loader) loader();
   }
 
-  window.showPlans = () => showSec("plansSection", "plans", ffLoadPlans);
+  
   window.showBandwidth = () => showSec("bandwidthSection", "bandwidth", ffLoadProfiles);
-  window.showPlanClients = () => showSec("planClientsSection", "plan-clients", ffLoadPlanClients);
+  
   window.showDevices = () => showSec("devicesSection", "devices", () => {
     ffLoadDevices();
     ffLoadBlocks();
@@ -189,22 +200,20 @@
   window.showWaitingQueue = () => showSec("waitingSection", "waiting", ffLoadWaiting);
   window.showRadioStatus = () => showSec("radioSection", "radio", ffLoadRadios);
   window.showPricingHub = function () {
-    toast("Pricing Hub removed — use Coin Rates and Plans instead", "info");
-    showPlans();
+    toast("Pricing Hub removed — use Coin Rates and Bandwidth instead", "info");
+    showRates();
   };
 
   const PAGE_META = {
     dashboard: ["Dashboard", "Overview of your CEBJ.NET system"],
     sales: ["Sales", "Revenue and transaction history"],
     rates: ["Coin Rates", "Insert-coin pricing tiers"],
-    plans: ["Plans", "Subscription / timed plans"],
     bandwidth: ["Bandwidth", "Speed profiles and current traffic"],
-    "plan-clients": ["Plan Clients", "Households and named customers"],
     sessions: ["Sessions", "Active and paused internet sessions"],
     devices: ["Devices", "LAN / Wi‑Fi clients"],
     waiting: ["Waiting Queue", "Unauthenticated clients"],
     vouchers: ["Vouchers", "Generate and manage vouchers"],
-    gcash: ["GCash", "GCash pay and companion pool"],
+    gcash: ["GCash", "Setup → mint pool → companion"],
     "captive-portal": ["Captive Portal", "Banner and portal audio"],
     network: ["Network", "WAN, DHCP, and Shield"],
     "access-points": ["Access Points", "Built-in radios and LAN APs"],
@@ -212,8 +221,8 @@
     radio: ["Radio Status", "Built-in Ruijie Wi‑Fi radios"],
     settings: ["Settings", "License, security, and branding"],
     operators: ["Operators", "RBAC users and audit log"],
-    reports: ["Reports", "Sales summaries"],
-    "remote-access": ["Remote Access", "On-demand Tailscale (optional)"],
+    reports: ["Sales", "Revenue and transaction history"],
+    "remote-access": ["Remote Access", "Tailscale (recommended) + WireGuard (test)"],
     "sub-vendo": ["Sub Vendo", "ESP32 coin stations"],
     update: ["OTA Update", "Firmware updates and stock restore"],
   };
@@ -238,10 +247,9 @@
     ffLoadUsers();
     ffLoadAudit();
   });
-  window.showReports = () => showSec("reportsSection", "reports", () => {
-    ffLoadReport("day");
-    ffLoadVendoSales();
-  });
+  window.showReports = function () {
+    if (typeof window.showSales === "function") window.showSales();
+  };
 
   window.showCaptivePortal = function () {
     showSec("captivePortalSection", "captive-portal", () => {
@@ -341,123 +349,110 @@
 
 
   window.showAccessPoints = () => showSec("accessPointsSection", "access-points", ffLoadAccessPoints);
-  window.showRemoteAccess = () => showSec("remoteAccessSection", "remote-access", ffLoadTailscale);
-
-  // ---- Tailscale remote access (on-demand) ----
-  function ffTsSetBadge(el, on, onText, offText) {
-    if (!el) return;
-    el.className = "badge " + (on ? "bg-success" : "bg-danger");
-    el.textContent = on ? onText : offText;
+function ffSetRemoteToggle(id, labelId, on, busy) {
+    const t = document.getElementById(id);
+    const lab = document.getElementById(labelId);
+    if (t) {
+      t._ffSyncing = true;
+      t.checked = !!on;
+      t.disabled = !!busy;
+      t._ffSyncing = false;
+    }
+    if (lab) lab.textContent = on ? "Enabled" : "Disabled";
   }
 
-  window.ffLoadTailscale = function () {
-    api("tailscale_status").catch(() => api("remote_access")).then((d) => {
+  window.showRemoteAccess = () => showSec("remoteAccessSection", "remote-access", ffLoadZeroTier);
+
+  window.ffLoadZeroTier = function () {
+    api("zerotier_status").then((d) => {
       if (!d) return;
       const installed = Number(d.installed) === 1;
-      const daemon = Number(d.daemon_running) === 1;
-      const connected = Number(d.connected) === 1 || Number(d.vpn_connected) === 1;
-      const ip = d.ip || d.vpn_ip || "";
-      const adminUrl = d.admin_url || d.remote_url || (ip ? "http://" + ip + "/admin.html" : "");
-      const inst = document.getElementById("tsInstalled");
-      if (inst) inst.textContent = installed ? "Yes" : "No";
-      const daemonEl = document.getElementById("tsDaemon");
-      if (daemonEl) {
-        daemonEl.className = "badge " + (daemon ? "bg-warning text-dark" : "bg-secondary");
-        daemonEl.textContent = daemon ? "Running" : "Stopped";
+      const enabled = Number(d.enabled) === 1;
+      const online = Number(d.online) === 1;
+      const net = String(d.network_status || "");
+      const inst = document.getElementById("ztInstalled");
+      if (inst) inst.textContent = installed ? "Ready" : "Missing";
+      const daemon = document.getElementById("ztDaemon");
+      if (daemon) {
+        daemon.className = "badge " + (enabled ? "bg-success" : "bg-secondary");
+        daemon.textContent = enabled ? (online ? "Online" : "Starting") : "Off";
       }
-      ffTsSetBadge(document.getElementById("vpnStatus"), connected, "Connected", "Stopped");
-      const ipEl = document.getElementById("vpnIP");
-      if (ipEl) ipEl.textContent = ip || "—";
-      const urlEl = document.getElementById("remoteURL");
+      const ns = document.getElementById("ztNetStatus");
+      if (ns) {
+        if (net === "OK") {
+          ns.className = "badge bg-success";
+          ns.textContent = "Authorized";
+        } else if (net === "ACCESS_DENIED" || net === "REQUESTING_CONFIGURATION") {
+          ns.className = "badge bg-warning text-dark";
+          ns.textContent = "Approve on website";
+        } else {
+          ns.className = "badge bg-secondary";
+          ns.textContent = enabled ? "Waiting" : "—";
+        }
+      }
+      const node = document.getElementById("ztNodeId");
+      if (node) node.textContent = d.node_id || "—";
+      const ip = document.getElementById("ztIP");
+      if (ip) ip.textContent = d.ip || "—";
+      const urlEl = document.getElementById("ztAdminURL");
       if (urlEl) {
-        if (adminUrl) {
-          urlEl.href = adminUrl;
-          urlEl.textContent = adminUrl;
+        if (d.admin_url) {
+          urlEl.href = d.admin_url;
+          urlEl.textContent = d.admin_url;
         } else {
           urlEl.removeAttribute("href");
           urlEl.textContent = "—";
         }
       }
-      const msg = document.getElementById("tsMessage");
+      const box = document.getElementById("ztNetworkId");
+      if (box && document.activeElement !== box && d.network_id) box.value = d.network_id;
+      const msg = document.getElementById("ztMessage");
       if (msg) msg.textContent = d.message || "";
-      const loginWrap = document.getElementById("tsLoginUrlWrap");
-      const loginA = document.getElementById("tsLoginUrl");
-      if (loginWrap && loginA) {
-        if (d.login_url) {
-          loginWrap.classList.remove("hidden");
-          loginA.href = d.login_url;
-          loginA.textContent = d.login_url;
-        } else {
-          loginWrap.classList.add("hidden");
-        }
-      }
-      const startBtn = document.getElementById("toggleVpnBtn");
-      if (startBtn) {
-        startBtn.disabled = connected;
-        startBtn.innerHTML = connected
-          ? '<i data-icon="check" data-size="16"></i> Connected'
-          : '<i data-icon="power" data-size="16"></i> Start remote';
-        if (typeof refreshIcons === "function") refreshIcons();
-      }
-    });
+      ffSetRemoteToggle("ztEnableToggle", "ztEnableToggleLabel", enabled, false);
+    }).catch(() => {});
   };
 
-  window.ffTailscaleInstall = function (btn) {
-    if (btn) btn.disabled = true;
-    api("tailscale_install", { method: "POST", body: {} })
-      .then((d) => {
-        toast(d.message || (d.status === "ok" ? "Installed" : "Failed"), d.status === "ok" ? "success" : "error");
-        ffLoadTailscale();
-      })
-      .finally(() => {
-        if (btn) btn.disabled = false;
-      });
-  };
-
-  window.ffTailscaleStart = function (btn) {
-    const key = (document.getElementById("remoteToken") || {}).value || "";
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting…';
+  window.ffZeroTierToggle = function (el) {
+    if (!el || el._ffSyncing) return;
+    const box = document.getElementById("ztNetworkId");
+    const networkId = ((box && box.value) || "").trim();
+    if (el.checked) {
+      if (!/^[0-9a-fA-F]{16}$/.test(networkId)) {
+        el.checked = false;
+        toast("Paste the 16-character Network ID from my.zerotier.com", "warning");
+        return;
+      }
+      el.disabled = true;
+      const lab = document.getElementById("ztEnableToggleLabel");
+      if (lab) lab.textContent = "Starting…";
+      api("zerotier_enable", { method: "POST", body: { network_id: networkId } })
+        .then((d) => {
+          toast((d && d.message) || (d && d.status === "ok" ? "ZeroTier started" : "Failed"), d && d.status === "ok" ? "success" : "error");
+          if (!d || d.status !== "ok") el.checked = false;
+          ffLoadZeroTier();
+        })
+        .catch(() => {
+          el.checked = false;
+          toast("ZeroTier failed to start", "error");
+        })
+        .finally(() => { el.disabled = false; });
+    } else {
+      el.disabled = true;
+      const lab = document.getElementById("ztEnableToggleLabel");
+      if (lab) lab.textContent = "Stopping…";
+      api("zerotier_disable", { method: "POST", body: {} })
+        .then((d) => {
+          toast((d && d.message) || "ZeroTier stopped", d && d.status === "ok" ? "success" : "error");
+          ffLoadZeroTier();
+        })
+        .catch(() => toast("Failed to stop ZeroTier", "error"))
+        .finally(() => { el.disabled = false; });
     }
-    api("tailscale_up", { method: "POST", body: { auth_key: key } })
-      .catch(() => api("remote_access_connect", { method: "POST", body: { auth_key: key, token: key } }))
-      .then((d) => {
-        toast(d.message || (d.status === "ok" ? "Started" : "Failed"), d.status === "ok" ? "success" : "error");
-        ffLoadTailscale();
-      })
-      .finally(() => {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = '<i data-icon="power" data-size="16"></i> Start remote';
-          if (typeof refreshIcons === "function") refreshIcons();
-        }
-      });
   };
 
-  window.ffTailscaleStop = function (btn) {
-    if (btn) btn.disabled = true;
-    api("tailscale_down", { method: "POST", body: {} })
-      .catch(() => api("remote_access_disconnect", { method: "POST", body: {} }))
-      .then((d) => {
-        toast(d.message || "Stopped", d.status === "ok" ? "success" : "error");
-        ffLoadTailscale();
-      })
-      .finally(() => {
-        if (btn) btn.disabled = false;
-      });
-  };
-
-  // Override legacy FastFi VPN helpers if admin.js still calls them
-  window.loadRemoteAccessStatus = function () {
-    ffLoadTailscale();
-  };
-  window.toggleVPN = function (btn) {
-    ffTailscaleStart(btn);
-  };
-  window.enrollRemoteAccess = function () {
-    ffTailscaleStart(document.getElementById("toggleVpnBtn"));
-  };
+  window.loadRemoteAccessStatus = function () { ffLoadZeroTier(); };
+  window.toggleVPN = function () { ffLoadZeroTier(); };
+  window.enrollRemoteAccess = function () { ffLoadZeroTier(); };
 
   // ---- Dashboard redesign (Per AP + ESP, Network, Ruijie, sessions/users) ----
   function fmtUptime(sec) {
@@ -491,9 +486,19 @@
 
   window.ffLoadDashboardOverview = function () {
     api("dashboard_overview").then((data) => {
-      if (!data || data.status !== "ok") return;
-      const k = data.kpis || {};
       const el = (id) => document.getElementById(id);
+      if (!data || data.status !== "ok") {
+        const tb = el("ffPerApEspTable");
+        if (tb)
+          tb.innerHTML =
+            '<tr><td colspan="6" class="text-danger text-center py-3">Dashboard overview failed to load.</td></tr>';
+        const rs = el("ffRecentSessions");
+        if (rs)
+          rs.innerHTML =
+            '<tr><td colspan="4" class="text-danger text-center">Failed to load sessions</td></tr>';
+        return;
+      }
+      const k = data.kpis || {};
       if (el("sysSalesToday")) el("sysSalesToday").innerText = peso(k.sales_today);
       if (el("sysSalesMonth")) el("sysSalesMonth").innerText = peso(k.sales_month);
       if (el("sysSalesWeek")) el("sysSalesWeek").innerText = peso(k.sales_week);
@@ -503,7 +508,7 @@
 
       const tb = el("ffPerApEspTable");
       if (tb) {
-        const rows = data.per_ap_esp || [];
+        const rows = asArr(data.per_ap_esp);
         const tot = data.totals || {};
         if (!rows.length) {
           tb.innerHTML =
@@ -579,7 +584,7 @@
       }
       const sto = el("ffRjStorage");
       if (sto) {
-        const slices = rj.storageSlices || [];
+        const slices = asArr(rj.storageSlices);
         const total = Number(rj.storageTotalMb) || 0;
         const used = slices.reduce((a, s) => a + (Number(s.mb) || 0), 0);
         const pct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
@@ -601,7 +606,7 @@
 
       const rs = el("ffRecentSessions");
       if (rs) {
-        const recent = data.recent_sessions || [];
+        const recent = asArr(data.recent_sessions);
         rs.innerHTML = recent.length
           ? recent
               .map(
@@ -618,7 +623,7 @@
 
       const cu = el("ffConnectedUsersDash");
       if (cu) {
-        const users = data.connected_users || [];
+        const users = asArr(data.connected_users);
         cu.innerHTML = users.length
           ? users
               .map((u) => {
@@ -639,6 +644,13 @@
       }
 
       if (typeof hydrateIcons === "function") hydrateIcons();
+    }).catch((err) => {
+      const tb = document.getElementById("ffPerApEspTable");
+      if (tb)
+        tb.innerHTML =
+          '<tr><td colspan="6" class="text-danger text-center py-3">Dashboard overview error: ' +
+          esc(err && err.message ? err.message : err) +
+          "</td></tr>";
     });
   };
 
@@ -670,7 +682,7 @@
           } else {
             tb.innerHTML = _ffApCache
               .map((a) => {
-                const espNames = (a.esp || []).map((e) => e.name).join(", ") || "—";
+                const espNames = asArr(a.esp).map((e) => e.name).join(", ") || "—";
                 const macIp = [a.mac, a.ip].filter(Boolean).join(" / ") || (a.iface || "—");
                 const delBtn =
                   a.kind === "builtin"
@@ -1036,32 +1048,8 @@
 
   // ---- Plans ----
   let _ffProfileCache = [];
-  let _ffPlanCache = [];
-  window.ffLoadPlans = function () {
-    api("list_plans").then((data) => {
-      const tb = document.getElementById("ffPlansTable");
-      if (!tb) return;
-      const rows = data.data || [];
-      _ffPlanCache = rows;
-      tb.innerHTML = rows.length
-        ? rows
-            .map(
-              (p) => `<tr>
-          <td>${esc(p.name)}</td><td>${peso(p.price)}</td>
-          <td>${p.duration_min} min</td><td>${p.data_mb || 0} MB</td>
-          <td>${esc(p.profile_name || "—")}</td><td>${p.pause_limit || 0}</td>
-          <td class="ff-table-actions">
-            <div class="ff-action-btns">
-              <button type="button" class="btn btn-sm btn-outline-secondary" onclick='ffOpenPlanModal(${JSON.stringify(p).replace(/'/g, "&#39;")})'>Edit</button>
-              <button type="button" class="btn btn-sm btn-outline-danger" onclick="ffDeletePlan(${p.id})">Del</button>
-              <button type="button" class="btn btn-sm btn-primary" onclick="ffActivatePlanPrompt(${p.id})">Activate</button>
-            </div>
-          </td></tr>`
-            )
-            .join("")
-        : '<tr><td colspan="7" class="text-muted text-center">No plans yet</td></tr>';
-    });
-  };
+  
+  
 
   function ffFillProfileSelect(sel, selectedId) {
     if (!sel) return;
@@ -1071,80 +1059,7 @@
     sel.innerHTML = opts.join("");
     sel.value = String(selectedId ?? 0);
   }
-
-  window.ffOpenPlanModal = function (existing) {
-    const fill = function () {
-      document.getElementById("ffPlanModalTitle").textContent = existing?.id ? "Edit Plan" : "Add Plan";
-      document.getElementById("ffPlanId").value = existing?.id || "";
-      document.getElementById("ffPlanName").value = existing?.name || "";
-      document.getElementById("ffPlanPrice").value = existing?.price ?? 50;
-      document.getElementById("ffPlanDuration").value = existing?.duration_min ?? 1440;
-      document.getElementById("ffPlanData").value = existing?.data_mb ?? 0;
-      document.getElementById("ffPlanPause").value = existing?.pause_limit ?? 0;
-      ffFillProfileSelect(document.getElementById("ffPlanProfile"), existing?.profile_id ?? 0);
-      ffShowOverlay("ffPlanModal");
-      setTimeout(() => document.getElementById("ffPlanName")?.focus(), 50);
-    };
-    api("list_profiles")
-      .then((data) => {
-        _ffProfileCache = data.data || [];
-        fill();
-      })
-      .catch(fill);
-  };
-  window.ffClosePlanModal = function () {
-    ffHideOverlay("ffPlanModal");
-  };
-  window.ffSavePlan = function () {
-    const name = document.getElementById("ffPlanName").value.trim();
-    if (!name) {
-      toast("Plan name is required", "warning");
-      return;
-    }
-    const body = {
-      id: document.getElementById("ffPlanId").value || undefined,
-      name,
-      price: Number(document.getElementById("ffPlanPrice").value || 0),
-      duration_min: Number(document.getElementById("ffPlanDuration").value || 0),
-      data_mb: Number(document.getElementById("ffPlanData").value || 0),
-      profile_id: Number(document.getElementById("ffPlanProfile").value || 0),
-      pause_limit: Number(document.getElementById("ffPlanPause").value || 0),
-      enabled: 1,
-    };
-    api("save_plan", { method: "POST", body }).then((d) => {
-      toast(d.status === "ok" ? "Plan saved" : d.message || "Failed", d.status === "ok" ? "success" : "error");
-      if (d.status === "ok") {
-        ffClosePlanModal();
-        ffLoadPlans();
-      }
-    });
-  };
-
-  window.ffDeletePlan = function (id) {
-    ffConfirm("Delete this plan? This cannot be undone.", {
-      title: "Delete Plan",
-      okText: "Delete",
-      onConfirm: function () {
-        api("delete_plan", { method: "POST", body: { id } }).then(() => ffLoadPlans());
-      },
-    });
-  };
-
-  window.ffActivatePlanPrompt = function (plan_id) {
-    ffPromptFields({
-      title: "Activate Plan",
-      label1: "Client MAC address",
-      placeholder1: "AA:BB:CC:DD:EE:FF",
-      emptyMsg: "Enter a MAC address",
-      onOk: function (mac) {
-        api("activate_plan", { method: "POST", body: { plan_id, mac } }).then((d) => {
-          toast(d.status === "ok" ? "Plan activated" : d.message || "Failed", d.status === "ok" ? "success" : "error");
-        });
-      },
-    });
-  };
-
-  // ---- Profiles / Bandwidth (KonekSik-style cards) ----
+// ---- Profiles / Bandwidth (KonekSik-style cards) ----
   let _ffTrafficChart = null;
   function kbpsToMbps(k) {
     return Math.round(((Number(k) || 0) / 1024) * 10) / 10;
@@ -1164,7 +1079,7 @@
   window.ffLoadProfiles = function () {
     api("list_profiles").then((data) => {
       const host = document.getElementById("ffBandwidthCards");
-      const rows = data.data || [];
+      const rows = data.profiles || data.data || [];
       _ffProfileCache = rows;
       if (host) {
         host.innerHTML = rows.length
@@ -1192,6 +1107,63 @@
       }
       ffRenderTrafficChart();
     });
+  };
+
+  window.ffFillVoucherProfiles = function () {
+    const sel = document.getElementById("voucherProfile");
+    return api("list_profiles").then((data) => {
+      const rows = (data.profiles || data.data || []).filter((p) => Number(p.enabled) !== 0);
+      if (!sel) return rows;
+      if (!rows.length) {
+        sel.innerHTML = '<option value="">No profile plans yet</option>';
+        return rows;
+      }
+      sel.innerHTML =
+        '<option value="">Select a speed profile</option>' +
+        rows
+          .map((p) => {
+            const dl = kbpsToMbps(p.down_kbps != null ? p.down_kbps : p.download_kbps);
+            const ul = kbpsToMbps(p.up_kbps != null ? p.up_kbps : p.upload_kbps);
+            return `<option value="${p.id}">${esc(p.name)} — ${dl} Mbps down / ${ul} Mbps up</option>`;
+          })
+          .join("");
+      return rows;
+    });
+  };
+
+  window.ffOpenGenerateVouchers = function () {
+    const modal = document.getElementById("modalGenerateVouchers");
+    if (modal) modal.classList.add("show");
+    if (typeof updateVoucherDurationPreview === "function") updateVoucherDurationPreview();
+    ffFillVoucherProfiles();
+  };
+
+  const _ffOrigGenerateVouchers = window.generateVouchers;
+  window.generateVouchers = function () {
+    const sel = document.getElementById("voucherProfile");
+    const profileId = Number(sel && sel.value) || 0;
+    if (!profileId) {
+      ffConfirm("Generate a profile plan first.", {
+        title: "Speed profile required",
+        okText: "OK",
+        okClass: "btn btn-primary btn-sm",
+        cancelText: "Close",
+      });
+      return;
+    }
+    const origFetch = window.fetch;
+    window.fetch = function (url, opts) {
+      window.fetch = origFetch;
+      if (typeof url === "string" && url.indexOf("action=generate_vouchers") !== -1 && url.indexOf("profile_id=") === -1) {
+        url += "&profile_id=" + encodeURIComponent(String(profileId));
+      }
+      return origFetch.call(this, url, opts);
+    };
+    try {
+      if (typeof _ffOrigGenerateVouchers === "function") return _ffOrigGenerateVouchers();
+    } finally {
+      window.fetch = origFetch;
+    }
   };
 
   window.ffToggleProfile = function (id, enabled, name, down_kbps, up_kbps, band) {
@@ -1284,122 +1256,7 @@
       },
     });
   }
-
-  // ---- Plan clients (table) ----
-  window.ffLoadPlanClients = function () {
-    api("list_plan_clients").then((data) => {
-      const tb = document.getElementById("ffPlanClientsTable");
-      if (!tb) return;
-      const rows = data.data || [];
-      if (!rows.length) {
-        tb.innerHTML = '<tr><td colspan="6" class="text-muted text-center">No clients yet</td></tr>';
-        return;
-      }
-      tb.innerHTML = rows
-        .map((c) => {
-          const nDev = (c.devices || []).length;
-          const devHint = (c.devices || []).map((d) => d.mac).slice(0, 2).join(", ") || "—";
-          return `<tr>
-            <td>${esc(c.name)}</td>
-            <td>${esc(c.contact || "—")}</td>
-            <td>${esc(c.plan_name || "No plan")}</td>
-            <td>${esc(c.status || "active")}</td>
-            <td class="small">${nDev} <span class="text-muted">(${esc(devHint)})</span></td>
-            <td class="ff-table-actions">
-              <div class="ff-action-btns">
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="ffAttachDevice(${c.id})">Add MAC</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" onclick='ffOpenClientModal(${JSON.stringify(c).replace(/'/g, "&#39;")})'>Edit</button>
-                <button type="button" class="btn btn-sm btn-outline-danger" onclick="ffDeleteClient(${c.id})">Del</button>
-              </div>
-            </td>
-          </tr>`;
-        })
-        .join("");
-    });
-  };
-
-  window.ffOpenClientModal = function (existing) {
-    const fill = function () {
-      document.getElementById("ffClientModalTitle").textContent = existing?.id ? "Edit Client" : "Add Client";
-      document.getElementById("ffClientId").value = existing?.id || "";
-      document.getElementById("ffClientName").value = existing?.name || "";
-      document.getElementById("ffClientContact").value = existing?.contact || "";
-      document.getElementById("ffClientNotes").value = existing?.notes || "";
-      const sel = document.getElementById("ffClientPlan");
-      sel.innerHTML =
-        '<option value="0">No plan</option>' +
-        _ffPlanCache.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-      sel.value = String(existing?.plan_id ?? 0);
-      ffShowOverlay("ffClientModal");
-      setTimeout(() => document.getElementById("ffClientName")?.focus(), 50);
-    };
-    api("list_plans")
-      .then((data) => {
-        _ffPlanCache = data.data || [];
-        fill();
-      })
-      .catch(fill);
-  };
-  window.ffCloseClientModal = function () {
-    ffHideOverlay("ffClientModal");
-  };
-  window.ffSaveClient = function () {
-    const name = document.getElementById("ffClientName").value.trim();
-    if (!name) {
-      toast("Client name is required", "warning");
-      return;
-    }
-    api("save_plan_client", {
-      method: "POST",
-      body: {
-        id: document.getElementById("ffClientId").value || undefined,
-        name,
-        contact: document.getElementById("ffClientContact").value.trim(),
-        plan_id: Number(document.getElementById("ffClientPlan").value || 0),
-        notes: document.getElementById("ffClientNotes").value.trim(),
-        status: "active",
-      },
-    }).then((d) => {
-      if (d.status === "ok") {
-        toast("Client saved", "success");
-        ffCloseClientModal();
-        ffLoadPlanClients();
-      } else toast(d.message || "Failed", "error");
-    });
-  };
-
-  window.ffDeleteClient = function (id) {
-    ffConfirm("Delete this plan client?", {
-      title: "Delete Client",
-      okText: "Delete",
-      onConfirm: function () {
-        api("delete_plan_client", { method: "POST", body: { id } }).then(() => ffLoadPlanClients());
-      },
-    });
-  };
-
-  window.ffAttachDevice = function (client_id) {
-    ffPromptFields({
-      title: "Attach Device",
-      label1: "MAC address",
-      placeholder1: "AA:BB:CC:DD:EE:FF",
-      label2: "Hostname (optional)",
-      placeholder2: "Galaxy",
-      emptyMsg: "Enter a MAC address",
-      onOk: function (mac, hostname) {
-        api("attach_plan_device", { method: "POST", body: { client_id, mac, hostname } }).then((d) => {
-          toast(d.status === "ok" ? "Attached" : d.message, d.status === "ok" ? "success" : "error");
-          ffLoadPlanClients();
-        });
-      },
-    });
-  };
-
-  window.ffDetachDevice = function (id) {
-    api("detach_plan_device", { method: "POST", body: { id } }).then(() => ffLoadPlanClients());
-  };
-
-  // ---- Devices / blocks ----
+// ---- Devices / blocks ----
   window.ffLoadDevices = function () {
     api("list_devices").then((data) => {
       const tb = document.getElementById("ffDevicesTable");
@@ -1568,16 +1425,12 @@
       const rates = (data.rates || [])
         .map((r) => `<li>${peso(r.price)} → ${r.minutes} min</li>`)
         .join("");
-      const plans = (data.plans || [])
-        .map((p) => `<li>${esc(p.name)} — ${peso(p.price)} / ${p.duration_min} min</li>`)
-        .join("");
       const profiles = (data.profiles || [])
         .map((p) => `<li>${esc(p.name)} — ${p.down_kbps}/${p.up_kbps} Kbps · ${ffBandLabel(p.band)}</li>`)
         .join("");
       host.innerHTML = `
-        <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><h5>Coin Rates</h5><ul>${rates || "<li class='text-muted'>None</li>"}</ul></div></div></div>
-        <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><h5>Plans</h5><ul>${plans || "<li class='text-muted'>None</li>"}</ul></div></div></div>
-        <div class="col-md-4"><div class="card border-0 shadow-sm"><div class="card-body"><h5>Bandwidth</h5><ul>${profiles || "<li class='text-muted'>None</li>"}</ul></div></div></div>`;
+        <div class="col-md-6"><div class="card border-0 shadow-sm"><div class="card-body"><h5>Coin Rates</h5><ul>${rates || "<li class='text-muted'>None</li>"}</ul></div></div></div>
+        <div class="col-md-6"><div class="card border-0 shadow-sm"><div class="card-body"><h5>Bandwidth</h5><ul>${profiles || "<li class='text-muted'>None</li>"}</ul></div></div></div>`;
     });
   };
 
@@ -1585,7 +1438,7 @@
   const FF_ROLE_PERM_META = [
     { key: "view_dashboard", label: "View dashboard / sales" },
     { key: "manage_sessions", label: "Manage sessions / devices" },
-    { key: "edit_rates", label: "Edit rates / plans / vouchers" },
+    { key: "edit_rates", label: "Edit rates / vouchers" },
     { key: "network", label: "Network / Wi‑Fi / APs" },
     { key: "operators", label: "Operators & audit" },
     { key: "ota", label: "OTA / firmware / reboot" },
@@ -1816,6 +1669,283 @@
     settings.insertBefore(panel, settings.firstChild);
   }
 
+  async function ffParseApiResponse(r) {
+    const ct = (r.headers.get("content-type") || "").toLowerCase();
+    const text = await r.text();
+    const trimmed = (text || "").trim();
+    const looksJson =
+      ct.includes("application/json") ||
+      trimmed.startsWith("{") ||
+      trimmed.startsWith("[");
+    if (looksJson) {
+      try {
+        return { httpStatus: r.status, data: JSON.parse(trimmed) };
+      } catch (e) {
+        return {
+          httpStatus: r.status,
+          data: {
+            status: "error",
+            message: "Invalid JSON response (HTTP " + r.status + ")",
+          },
+        };
+      }
+    }
+    const snippet = trimmed.replace(/\s+/g, " ").slice(0, 120);
+    return {
+      httpStatus: r.status,
+      data: {
+        status: "error",
+        message:
+          "Firmware upload failed: HTTP " +
+          r.status +
+          (snippet ? " — " + snippet : ""),
+      },
+    };
+  }
+
+  let ffFlashLockTimer = null;
+  let ffFlashLockPoll = null;
+  let ffFlashLockActive = false;
+  let ffFlashLockFailCount = 0;
+  let ffFlashLockStarted = 0;
+  let ffFlashLockFloor = 8;
+
+  function ffFlashLockUnload(ev) {
+    if (!ffFlashLockActive) return;
+    ev.preventDefault();
+    ev.returnValue = "Firmware flash in progress. Do not leave this page.";
+    return ev.returnValue;
+  }
+
+  function ffFlashLockKey(ev) {
+    if (!ffFlashLockActive) return;
+    const block = ev.key === "Escape" || ev.key === "F5" ||
+      ((ev.ctrlKey || ev.metaKey) && String(ev.key).toLowerCase() === "r");
+    if (block) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+  }
+
+  function ffSetFlashLockProgress(pct, hint) {
+    pct = Math.max(0, Math.min(99, Math.round(pct)));
+    const bar = document.getElementById("ffFlashLockBar");
+    const pctEl = document.getElementById("ffFlashLockPct");
+    const hintEl = document.getElementById("ffFlashLockHint");
+    if (bar) bar.style.width = pct + "%";
+    if (pctEl) pctEl.textContent = pct + "%";
+    if (hint && hintEl) hintEl.textContent = hint;
+  }
+
+  function ffStopFlashLockTimers() {
+    if (ffFlashLockTimer) {
+      clearInterval(ffFlashLockTimer);
+      ffFlashLockTimer = null;
+    }
+    if (ffFlashLockPoll) {
+      clearInterval(ffFlashLockPoll);
+      ffFlashLockPoll = null;
+    }
+  }
+
+  function ffEndFlashLock() {
+    ffFlashLockActive = false;
+    ffStopFlashLockTimers();
+    window.removeEventListener("beforeunload", ffFlashLockUnload);
+    window.removeEventListener("keydown", ffFlashLockKey, true);
+    document.body.style.overflow = "";
+    const el = document.getElementById("ffFlashLockOverlay");
+    if (el) {
+      el.style.display = "none";
+      el.classList.remove("is-on");
+    }
+  }
+
+  function ffMarkFlashAccepted(hint) {
+    ffFlashLockFloor = Math.max(ffFlashLockFloor, 18);
+    ffSetFlashLockProgress(Math.max(18, ffFlashLockFloor), hint || "Flash started. Do not interrupt.");
+  }
+
+  function ffBeginFlashLock(kind) {
+    ffFlashLockActive = true;
+    ffFlashLockFailCount = 0;
+    ffFlashLockStarted = Date.now();
+    ffFlashLockFloor = 8;
+    const oem = kind === "oem";
+    const ota = kind === "ota";
+    const title = document.getElementById("ffFlashLockTitle");
+    const msg = document.getElementById("ffFlashLockMsg");
+    if (title) title.textContent = oem ? "Installing OEM ReyeeOS" : (ota ? "Applying firmware update" : "Flashing KonekSik Firmware");
+    if (msg) msg.textContent = "Do not close this tab, refresh, click around, or unplug the router.";
+    ffSetFlashLockProgress(8, "Starting flash…");
+    const el = document.getElementById("ffFlashLockOverlay");
+    if (el) {
+      el.style.display = "flex";
+      el.classList.add("is-on");
+    }
+    document.body.style.overflow = "hidden";
+    window.addEventListener("beforeunload", ffFlashLockUnload);
+    window.addEventListener("keydown", ffFlashLockKey, true);
+    ffStopFlashLockTimers();
+    ffFlashLockTimer = setInterval(function () {
+      const t = (Date.now() - ffFlashLockStarted) / 1000;
+      const creep = 8 + 72 * (1 - Math.exp(-t / 35));
+      ffSetFlashLockProgress(Math.max(ffFlashLockFloor, Math.min(88, creep)));
+    }, 400);
+    ffFlashLockPoll = setInterval(function () {
+      api("update_progress").then((d) => {
+        ffFlashLockFailCount = 0;
+        const rawLog = String((d && d.progress) || "");
+        const log = rawLog.toLowerCase();
+        const lines = rawLog.trim().split("\n");
+        const last = (lines[lines.length - 1] || "").toLowerCase();
+        if (last.indexOf("fatal:") !== -1 || last.indexOf("insufficient overlay") !== -1 || last.indexOf("insufficient space") !== -1) {
+          ffEndFlashLock();
+          const lines = rawLog.trim().split("\n");
+          const last = lines[lines.length - 1] || "Update failed";
+          toast(last, "error");
+          const again = document.getElementById("btnOTA_Proceed");
+          if (again) again.disabled = false;
+          const fwBtn = document.getElementById("ffFwFlashBtn");
+          if (fwBtn) fwBtn.disabled = false;
+          return;
+        }
+        if (log.indexOf("reboot") !== -1 || log.indexOf("completed") !== -1) {
+          ffFlashLockFloor = Math.max(ffFlashLockFloor, 86);
+          ffSetFlashLockProgress(Math.max(86, ffFlashLockFloor), "Write finished. Router is rebooting…");
+        } else if (
+          log.indexOf("mtd write") !== -1 ||
+          log.indexOf("sysupgrade") !== -1 ||
+          log.indexOf("unlocking") !== -1 ||
+          log.indexOf("writing") !== -1
+        ) {
+          ffFlashLockFloor = Math.max(ffFlashLockFloor, 42);
+          ffSetFlashLockProgress(Math.max(42, ffFlashLockFloor), "Writing firmware to flash. Do not unplug.");
+        } else if (log.indexOf("flash started") !== -1 || log.indexOf("pass") !== -1) {
+          ffFlashLockFloor = Math.max(ffFlashLockFloor, 22);
+          ffSetFlashLockProgress(Math.max(22, ffFlashLockFloor), "Flash accepted. Preparing write…");
+        }
+      }).catch(function () {
+        ffFlashLockFailCount += 1;
+        if (ffFlashLockFailCount >= 3) {
+          ffFlashLockFloor = Math.max(ffFlashLockFloor, 92);
+          ffSetFlashLockProgress(92, "Router is rebooting. Keep this tab open. Wait 2–5 minutes, then reconnect.");
+          ffStopFlashLockTimers();
+        }
+      });
+    }, 2000);
+  }
+
+  window.ffBeginFlashLock = ffBeginFlashLock;
+  window.ffEndFlashLock = ffEndFlashLock;
+  window.ffMarkFlashAccepted = ffMarkFlashAccepted;
+
+  window._ffAuthOk = { koneksik: false, oem: false };
+  // Signed token kept after the file input is cleared. Flash still sends it;
+  // the router verifies the signature again. This is not a frontend bypass.
+  window._ffAuthRaw = { koneksik: "", oem: "" };
+  window._ffAuthBusy = { koneksik: false, oem: false };
+
+  function ffAuthEls(kind) {
+    if (kind === "oem") {
+      return {
+        file: "ffOemAuthFile",
+        status: "ffOemAuthStatus",
+        action: "oem_restore",
+        flash: "ffOemFlashBtn",
+      };
+    }
+    return {
+      file: "ffFwAuthFile",
+      status: "ffFwAuthStatus",
+      action: "koneksik_manual_flash",
+      flash: "ffFwFlashBtn",
+    };
+  }
+
+  function ffClearAuthState(kind, message) {
+    const ids = ffAuthEls(kind);
+    window._ffAuthOk[kind] = false;
+    window._ffAuthRaw[kind] = "";
+    const file = document.getElementById(ids.file);
+    if (file) file.value = "";
+    const status = document.getElementById(ids.status);
+    if (status) status.textContent = message || "Authorization status: Not verified";
+    ffSyncFlashButton(kind);
+  }
+
+  window.ffOnFirmwareFilePicked = function (kind) {
+    ffClearAuthState(kind, "Authorization status: Not verified — firmware selection changed.");
+  };
+
+  function ffSyncFlashButton(kind) {
+    const ids = ffAuthEls(kind);
+    const btn = document.getElementById(ids.flash);
+    if (!btn) return;
+    if (kind === "koneksik") {
+      const staged = (document.getElementById("ffFwStatus")?.textContent || "").indexOf("Staged:") === 0;
+      btn.disabled = !(staged && window._ffAuthOk.koneksik);
+      return;
+    }
+    btn.disabled = !(window._ffAuthOk.oem && !!ffOemConfirmToken);
+  }
+
+  window.ffLoadFlashAuthFile = function (input, kind) {
+    const file = input && input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () {
+      const ids = ffAuthEls(kind);
+      window._ffAuthRaw[kind] = String(reader.result || "").trim();
+      window._ffAuthOk[kind] = false;
+      const status = document.getElementById(ids.status);
+      if (status) status.textContent = "Authorization status: Not verified";
+      ffSyncFlashButton(kind);
+    };
+    reader.readAsText(file);
+  };
+
+  window.ffVerifyFlashAuth = function (kind) {
+    const ids = ffAuthEls(kind);
+    const raw = String(window._ffAuthRaw[kind] || "").trim();
+    const status = document.getElementById(ids.status);
+    if (window._ffAuthBusy[kind]) return;
+    window._ffAuthOk[kind] = false;
+    ffSyncFlashButton(kind);
+    if (!raw) {
+      if (status) status.textContent = "Seller authorization required.";
+      toast("Seller authorization required.", "warning");
+      return;
+    }
+    window._ffAuthBusy[kind] = true;
+    if (status) status.textContent = "Checking seller authorization…";
+    api("flash_auth_verify", {
+      method: "POST",
+      body: { flash_auth: raw, action_name: ids.action },
+    }).then((d) => {
+      window._ffAuthBusy[kind] = false;
+      if (d.status === "ok" && d.code === "VALID") {
+        window._ffAuthOk[kind] = true;
+        window._ffAuthRaw[kind] = raw;
+        const file = document.getElementById(ids.file);
+        if (file) file.value = "";
+        if (status) status.textContent = "Authorization status: Verified. You can flash without choosing the file again.";
+        toast(d.message || "Seller authorization verified.", "success");
+      } else {
+        window._ffAuthOk[kind] = false;
+        if (status) status.textContent = d.message || "Invalid seller authorization.";
+        toast(d.message || "Invalid seller authorization.", "error");
+      }
+      ffSyncFlashButton(kind);
+    }).catch((e) => {
+      window._ffAuthBusy[kind] = false;
+      window._ffAuthOk[kind] = false;
+      if (status) status.textContent = "Invalid seller authorization.";
+      toast(String(e), "error");
+      ffSyncFlashButton(kind);
+    });
+  };
+
   window.ffUploadFirmware = function () {
     const input = document.getElementById("ffFirmwareFile");
     const file = input && input.files && input.files[0];
@@ -1831,12 +1961,12 @@
       credentials: "include",
       body: file,
     })
-      .then((r) => r.json())
-      .then((d) => {
+      .then((r) => ffParseApiResponse(r))
+      .then(({ data: d }) => {
         if (d.status === "ok") {
           toast("Firmware staged (" + (d.size_mb || "?") + " MB)", "success");
           if (status) status.textContent = "Staged: " + file.name + " (" + (d.size_mb || "?") + " MB). Ready to flash.";
-          if (flashBtn) flashBtn.disabled = false;
+          ffSyncFlashButton("koneksik");
         } else {
           toast(d.message || "Upload failed", "error");
           if (status) status.textContent = d.message || "Upload failed";
@@ -1849,6 +1979,7 @@
   };
 
   window.ffFlashUploadedFirmware = function () {
+    if (ffFlashLockActive || window._ffAuthBusy.koneksik) return;
     if (!document.getElementById("ffFwConfirmStock")?.checked) {
       toast("Confirm you understand the flash risk", "warning");
       return;
@@ -1860,10 +1991,26 @@
         okText: "Flash Now",
         okClass: "btn btn-warning btn-sm",
         onConfirm: function () {
-          api("flash_firmware", { method: "POST", body: { confirm_stock: "1" } }).then((d) => {
-            toast(d.message || (d.status === "ok" ? "Flashing…" : "Failed"), d.status === "ok" ? "success" : "error");
+          ffBeginFlashLock("koneksik");
+          const auth = String(window._ffAuthRaw.koneksik || "").trim();
+          api("flash_firmware", { method: "POST", body: { confirm_stock: "1", flash_auth: auth } }).then((d) => {
             const status = document.getElementById("ffFwStatus");
             if (status) status.textContent = d.message || "";
+            if (d.status !== "ok") {
+              ffEndFlashLock();
+              toast(d.message || "Failed", "error");
+              return;
+            }
+            ffMarkFlashAccepted(d.message || "Flash started. Do not interrupt.");
+            if (/preview/i.test(d.message || "")) {
+              setTimeout(function () {
+                ffEndFlashLock();
+                toast("Preview mode — flash not executed", "success");
+              }, 3500);
+            }
+          }).catch((e) => {
+            ffEndFlashLock();
+            toast("Flash failed: " + e, "error");
           });
         },
       }
@@ -1871,6 +2018,14 @@
   };
 
   let ffOemConfirmToken = "";
+  let ffOemPollTimer = null;
+
+  function ffStopOemPoll() {
+    if (ffOemPollTimer) {
+      clearInterval(ffOemPollTimer);
+      ffOemPollTimer = null;
+    }
+  }
 
   function ffRenderOemReport(report) {
     const box = document.getElementById("ffOemReport");
@@ -1886,7 +2041,7 @@
       .join("");
     box.style.display = "block";
     box.innerHTML = `
-      <div class="mb-1"><strong>OEM Firmware Detected</strong></div>
+      <div class="mb-1"><strong>${report.pending ? "OEM Firmware Validating" : "OEM Firmware Detected"}</strong></div>
       <div>Type: ${report.package_type || "—"}</div>
       <div>Product ID: ${report.product_id || "—"}</div>
       <div>Hardware: ${report.hardware || "RG-EW1200G-PRO"}</div>
@@ -1895,8 +2050,39 @@
       <div>Firmware partition: ${report.firmware_mtd_size || "—"} bytes</div>
       <div>SHA256: <code style="font-size:10px">${report.sha256 || "—"}</code></div>
       <div>Flash target: <code>${report.flash_target || "firmware"}</code></div>
-      <div>Ready: ${report.ready ? "YES" : "NO"}</div>
+      <div>Ready: ${report.ready ? "YES" : (report.pending ? "VALIDATING" : "NO")}</div>
       <div class="mt-2">${rows}</div>`;
+  }
+
+  function ffApplyOemResult(d) {
+    const status = document.getElementById("ffOemStatus");
+    const flashBtn = document.getElementById("ffOemFlashBtn");
+    const cancelBtn = document.getElementById("ffOemCancelBtn");
+    if (d.status === "ok" && d.report && (d.pending || d.report.pending) && !d.report.ready) {
+      ffOemConfirmToken = "";
+      ffRenderOemReport(d.report);
+      if (status) status.textContent = d.message || "Validating in background…";
+      if (flashBtn) flashBtn.disabled = true;
+      if (cancelBtn) cancelBtn.disabled = false;
+      return "pending";
+    }
+    if (d.status === "ok" && d.report && d.report.ready) {
+      ffStopOemPoll();
+      ffOemConfirmToken = d.report.confirm_token || "";
+      ffRenderOemReport(d.report);
+      toast("OEM firmware validated", "success");
+      if (status) status.textContent = "Validated. Review the report, then confirm to install.";
+      ffSyncFlashButton("oem");
+      if (cancelBtn) cancelBtn.disabled = false;
+      return "ready";
+    }
+    ffStopOemPoll();
+    ffOemConfirmToken = "";
+    ffRenderOemReport(d.report || null);
+    toast(d.message || "OEM validation failed", "error");
+    if (status) status.textContent = d.message || "OEM validation failed";
+    if (flashBtn) flashBtn.disabled = true;
+    return "fail";
   }
 
   window.ffUploadOemFirmware = function () {
@@ -1905,31 +2091,38 @@
     const status = document.getElementById("ffOemStatus");
     const flashBtn = document.getElementById("ffOemFlashBtn");
     const cancelBtn = document.getElementById("ffOemCancelBtn");
+    ffStopOemPoll();
     ffOemConfirmToken = "";
     if (flashBtn) flashBtn.disabled = true;
     if (!file) {
       toast("Choose an official OEM package first", "warning");
       return;
     }
-    if (status) status.textContent = "Uploading & validating " + file.name + "…";
+    ffClearAuthState("oem");
+    if (status) status.textContent = "Uploading " + file.name + "…";
     fetch("/cgi-bin/api?action=upload_oem_firmware", {
       method: "POST",
       credentials: "include",
       body: file,
     })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.status === "ok" && d.report) {
-          ffOemConfirmToken = d.report.confirm_token || "";
-          ffRenderOemReport(d.report);
-          toast("OEM firmware validated", "success");
-          if (status) status.textContent = "Validated. Review the report, then confirm to install.";
-          if (flashBtn) flashBtn.disabled = false;
-          if (cancelBtn) cancelBtn.disabled = false;
-        } else {
-          ffRenderOemReport(d.report || null);
-          toast(d.message || "OEM validation failed", "error");
-          if (status) status.textContent = d.message || "OEM validation failed";
+      .then((r) => ffParseApiResponse(r))
+      .then(({ data: d }) => {
+        const st = ffApplyOemResult(d);
+        if (st === "pending") {
+          let n = 0;
+          ffOemPollTimer = setInterval(function () {
+            n += 1;
+            if (n > 180) {
+              ffStopOemPoll();
+              if (status) status.textContent = "Validation timed out. Use rgos.bin or try again.";
+              toast("OEM validation timed out", "error");
+              return;
+            }
+            api("validate_oem_firmware").then((vd) => {
+              const vs = ffApplyOemResult(vd);
+              if (vs !== "pending") ffStopOemPoll();
+            }).catch(() => {});
+          }, 2000);
         }
       })
       .catch((e) => {
@@ -1940,7 +2133,9 @@
 
   window.ffCancelOemFirmware = function () {
     api("cancel_oem_firmware", { method: "POST", body: {} }).then((d) => {
+      ffStopOemPoll();
       ffOemConfirmToken = "";
+      ffClearAuthState("oem");
       ffRenderOemReport(null);
       const flashBtn = document.getElementById("ffOemFlashBtn");
       const cancelBtn = document.getElementById("ffOemCancelBtn");
@@ -1953,6 +2148,7 @@
   };
 
   window.ffFlashOemFirmware = function () {
+    if (ffFlashLockActive || window._ffAuthBusy.oem) return;
     if (!document.getElementById("ffOemConfirm")?.checked) {
       toast("Confirm OEM ReyeeOS installation risk", "warning");
       return;
@@ -1968,13 +2164,32 @@
         okText: "Install OEM Firmware",
         okClass: "btn btn-danger btn-sm",
         onConfirm: function () {
+          ffBeginFlashLock("oem");
           api("flash_oem_firmware", {
             method: "POST",
-            body: { confirm_oem: "1", confirm_token: ffOemConfirmToken },
+            body: {
+              confirm_oem: "1",
+              confirm_token: ffOemConfirmToken,
+              flash_auth: String(window._ffAuthRaw.oem || "").trim(),
+            },
           }).then((d) => {
-            toast(d.message || (d.status === "ok" ? "OEM flash started…" : "Failed"), d.status === "ok" ? "success" : "error");
             const status = document.getElementById("ffOemStatus");
             if (status) status.textContent = d.message || "";
+            if (d.status !== "ok") {
+              ffEndFlashLock();
+              toast(d.message || "Failed", "error");
+              return;
+            }
+            ffMarkFlashAccepted(d.message || "OEM flash started. Do not interrupt.");
+            if (/preview/i.test(d.message || "")) {
+              setTimeout(function () {
+                ffEndFlashLock();
+                toast("Preview mode — OEM flash not executed", "success");
+              }, 3500);
+            }
+          }).catch((e) => {
+            ffEndFlashLock();
+            toast("OEM flash failed: " + e, "error");
           });
         },
       }
@@ -2041,9 +2256,7 @@
   window.navigateToHash = function () {
     const h = (location.hash || "").replace(/^#/, "");
     const map = {
-      plans: showPlans,
       bandwidth: showBandwidth,
-      "plan-clients": showPlanClients,
       devices: showDevices,
       waiting: showWaitingQueue,
       radio: showRadioStatus,
@@ -2079,29 +2292,559 @@
       .replace(/"/g, "&quot;");
   }
 
-  window.detectESP32 = function () {
-    const mac = (document.getElementById("detectEspMac")?.value || "").trim();
-    const license_id = (document.getElementById("detectLicenseId")?.value || "").trim();
-    const name = (document.getElementById("detectEspName")?.value || "").trim();
-    const out = document.getElementById("detectEspResult");
-    if (!mac || !license_id) {
-      if (out) out.textContent = "Enter ESP MAC and License ID (KSK-…).";
-      if (typeof showToast === "function") showToast("MAC + License ID required", "warning");
-      return;
+  // Stock admin.js defines removeESPDevice; Del buttons call deleteESPDevice.
+  // Licensed rows: one explicit Unbind-and-delete confirm, then force=1.
+  // Soft delete without force returns REQUIRES_UNBIND and must not toast success.
+  window.deleteESPDevice = function (espId, force, meta) {
+    if (!espId) return;
+    meta = meta || {};
+    const lic = String(meta.license || "").trim();
+    const looksBound = !!(lic && lic !== "—" && lic !== "-" && lic !== "null");
+    const run = (withForce) => {
+      const q =
+        "/cgi-bin/api?action=delete_esp_device&slot_id=" +
+        encodeURIComponent(espId) +
+        (withForce ? "&force=1&confirm_unbind=1" : "");
+      return fetch(q, { credentials: "include" })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.code === "REQUIRES_UNBIND" || d.requires_unbind) {
+            const ok = confirm(
+              "Unbind and Delete ESP32?\n\nName: " +
+                (d.slot_name || meta.name || "ESP32") +
+                "\nMAC: " +
+                (d.slot_mac || meta.mac || "—") +
+                "\nLicense: " +
+                (d.license_id || meta.license || "—") +
+                "\n\nThis device is still bound to a KSK. Confirm to clear the live binding (signed .ksk kept), remove it from Registered ESP32 Devices, and refresh both tables.\n\nContinue?"
+            );
+            if (ok) return run(true);
+            if (typeof showToast === "function") {
+              showToast("Delete cancelled — Unbind required for bound devices", "warning");
+            }
+            return null;
+          }
+          if (d.status !== "ok") {
+            if (typeof showToast === "function") {
+              showToast(d.message || d.code || "Delete failed", "error");
+            }
+            return null;
+          }
+          if (typeof showToast === "function") {
+            showToast(d.message || "Deleted", "success");
+          }
+          if (typeof loadESPDevices === "function") loadESPDevices();
+          if (typeof loadLicensePool === "function") loadLicensePool();
+        });
+    };
+    if (force) return run(true);
+    if (looksBound) {
+      const ok = confirm(
+        "Unbind and Delete ESP32?\n\nName:\n" +
+          (meta.name || "ESP32") +
+          "\n\nMAC:\n" +
+          (meta.mac || "—") +
+          "\n\nLicense:\n" +
+          (meta.license || "—") +
+          "\n\nThis registered device is licensed. Delete will Unbind it first (clear live MAC, keep signed .ksk), then remove the Registered ESP32 Devices row. The license will show Unbound — not Active.\n\nOffline devices can still be cleaned up.\n\nContinue?"
+      );
+      if (!ok) return;
+      return run(true).catch((e) => {
+        if (typeof showToast === "function") showToast(String(e), "error");
+      });
     }
-    if (out) out.textContent = "Detecting…";
-    const q =
-      "/cgi-bin/api?action=esp_detect&mac=" +
-      encodeURIComponent(mac) +
-      "&license_id=" +
-      encodeURIComponent(license_id) +
-      (name ? "&name=" + encodeURIComponent(name) : "");
-    fetch(q, { credentials: "include" })
+    const ok = confirm(
+      "Delete ESP32?\n\nName:\n" +
+        (meta.name || "ESP32") +
+        "\n\nMAC:\n" +
+        (meta.mac || "—") +
+        "\n\nRemoves this unlicensed row from Registered ESP32 Devices."
+    );
+    if (!ok) return;
+    return run(false).catch((e) => {
+      if (typeof showToast === "function") showToast(String(e), "error");
+    });
+  };
+
+  window.removeESPDevice = function (espId) {
+    return window.deleteESPDevice(espId, false, {});
+  };
+
+  function ffFillMacCandidates(cands, suggested) {
+    const macEl = document.getElementById("detectEspMac");
+    const out = document.getElementById("detectEspResult");
+    if (!macEl) return;
+    if (suggested) macEl.value = suggested;
+    if (!out || !cands || !cands.length) return;
+    out.replaceChildren();
+    const label = document.createElement("div");
+    label.className = "small";
+    label.textContent = "Candidates — click to use:";
+    out.appendChild(label);
+    const row = document.createElement("div");
+    row.className = "d-flex flex-wrap gap-1 mt-1";
+    cands.slice(0, 8).forEach((c) => {
+      const mac = String(c.mac || "");
+      if (!mac) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-outline-secondary btn-sm font-monospace";
+      btn.textContent = mac + (c.ip ? " · " + c.ip : "");
+      btn.addEventListener("click", () => {
+        macEl.value = mac;
+      });
+      row.appendChild(btn);
+    });
+    out.appendChild(row);
+  }
+
+  window.scanEspMac = function () {
+    const out = document.getElementById("detectEspResult");
+    if (out) out.textContent = "Scanning LAN for ESP…";
+    fetch("/cgi-bin/api?action=esp_scan", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => {
-        if (out) out.textContent = d.message || d.status || JSON.stringify(d);
+        if (d.status !== "ok") {
+          if (out) out.textContent = d.message || "Scan failed";
+          if (typeof showToast === "function") showToast(d.message || "Scan failed", "error");
+          return;
+        }
+        if (d.suggested_mac) {
+          const macEl = document.getElementById("detectEspMac");
+          if (macEl) macEl.value = d.suggested_mac;
+        }
+        ffFillMacCandidates(d.candidates || [], d.suggested_mac || "");
         if (typeof showToast === "function") {
-          showToast(d.message || (d.status === "ok" ? "Detected" : "Failed"), d.status === "ok" ? "success" : "error");
+          showToast(d.message || "Scan done", d.suggested_mac ? "success" : "warning");
+        }
+      })
+      .catch((e) => {
+        if (out) out.textContent = String(e);
+      });
+  };
+
+  // Load → Verify → Bind state (browser only; Bind always re-validates server-side).
+  window._espKskState = {
+    loaded: false,
+    verified: false,
+    verifyToken: "",
+    parsed: null,
+    verifyResult: null,
+  };
+
+  function ffUtf8ToB64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    bytes.forEach((b) => {
+      bin += String.fromCharCode(b);
+    });
+    return btoa(bin);
+  }
+
+  function ffExtractSignedKsk(rawText) {
+    const text = String(rawText || "").trim();
+    if (!text) {
+      return { error: "Load a signed .ksk license to continue." };
+    }
+    if (/^KSK-[A-Za-z0-9_-]+$/i.test(text) && text.indexOf("{") < 0) {
+      return {
+        error:
+          "Invalid KSK input. Please load the signed .ksk license file (not only the License ID).",
+      };
+    }
+    let obj;
+    try {
+      obj = JSON.parse(text);
+    } catch (e) {
+      return { error: "Invalid KSK license. Please load a valid signed .ksk file." };
+    }
+    if (!obj || typeof obj !== "object") {
+      return { error: "Invalid KSK license. Please load a valid signed .ksk file." };
+    }
+    if (obj.type === "ksk_replacement_bundle" && obj.license && typeof obj.license === "object") {
+      obj = obj.license;
+    }
+    if (!obj.sig_b64 || !obj.license_id || obj.type !== "esp_coinslot") {
+      return {
+        error: "Invalid KSK input. Please load the signed .ksk license file from the seller package.",
+      };
+    }
+    return { license: obj, raw: JSON.stringify(obj) };
+  }
+
+  function ffExpiryLabel(expiresAt) {
+    const n = Number(expiresAt || 0);
+    if (!n) return "Never";
+    try {
+      return new Date(n * 1000).toISOString().slice(0, 10);
+    } catch (e) {
+      return String(n);
+    }
+  }
+
+  function ffSetKskUiStates(loadedText, compatText, bindText) {
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val || "—";
+    };
+    set("detectKskLoadedState", loadedText);
+    set("detectKskCompatState", compatText);
+    set("detectKskBindState", bindText);
+  }
+
+  function ffUpdateDetectButtons() {
+    const verifyBtn = document.getElementById("btnVerifyEspKsk");
+    const bindBtn = document.getElementById("btnBindEspKsk");
+    const st = window._espKskState || {};
+    if (verifyBtn) verifyBtn.disabled = !st.loaded;
+    if (bindBtn) {
+      const canBind =
+        !!st.verified &&
+        !!st.verifyResult &&
+        st.verifyResult.ready_to_bind &&
+        !st.verifyResult.already_bound &&
+        !window._espBindBusy;
+      bindBtn.disabled = !canBind;
+    }
+  }
+
+  function ffShowKskPreview(lic, statusText) {
+    const box = document.getElementById("detectKskPreview");
+    if (!box) return;
+    box.style.display = "block";
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val || "—";
+    };
+    set("detectKskPreviewId", lic && lic.license_id);
+    set("detectKskPreviewMac", lic && lic.mac);
+    set("detectKskPreviewChip", lic && lic.chip_id);
+    set("detectKskPreviewRouter", lic && lic.router_device_id);
+    set("detectKskPreviewPlan", lic && lic.plan);
+    set("detectKskPreviewExpiry", ffExpiryLabel(lic && lic.expires_at));
+    const hid = document.getElementById("detectLicenseId");
+    if (hid) hid.value = (lic && lic.license_id) || "";
+    ffSetKskUiStates("✓ Loaded", statusText || "Not verified", "Not bound");
+  }
+
+  function ffShowVerifyPanel(html, ok) {
+    const panel = document.getElementById("detectVerifyResult");
+    if (!panel) return;
+    panel.style.display = "block";
+    panel.className = "small mb-2 " + (ok ? "text-success" : "text-danger");
+    panel.innerHTML = html;
+  }
+
+  window.clearDetectKsk = function () {
+    window._espKskState = {
+      loaded: false,
+      verified: false,
+      verifyToken: "",
+      parsed: null,
+      verifyResult: null,
+    };
+    const file = document.getElementById("detectKskFile");
+    if (file) file.value = "";
+    const hid = document.getElementById("detectLicenseId");
+    if (hid) hid.value = "";
+    const box = document.getElementById("detectKskPreview");
+    if (box) box.style.display = "none";
+    const panel = document.getElementById("detectVerifyResult");
+    if (panel) {
+      panel.style.display = "none";
+      panel.innerHTML = "";
+    }
+    const out = document.getElementById("detectEspResult");
+    if (out) out.textContent = "Load a signed .ksk license to continue.";
+    ffUpdateDetectButtons();
+  };
+
+  window.loadDetectKskFile = function (input) {
+    const file = input && input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      const parsed = ffExtractSignedKsk(text);
+      const out = document.getElementById("detectEspResult");
+      if (parsed.error) {
+        window._espKskState.loaded = false;
+        window._espKskState.verified = false;
+        window._espKskState.parsed = null;
+        ffUpdateDetectButtons();
+        if (out) out.textContent = parsed.error;
+        if (typeof showToast === "function") showToast(parsed.error, "error");
+        return;
+      }
+      window._espKskState = {
+        loaded: true,
+        verified: false,
+        verifyToken: "",
+        parsed: parsed,
+        verifyResult: null,
+      };
+      ffShowKskPreview(parsed.license, "Not verified");
+      const macEl = document.getElementById("detectEspMac");
+      if (macEl && !(macEl.value || "").trim() && parsed.license.mac) {
+        macEl.value = String(parsed.license.mac);
+      }
+      const panel = document.getElementById("detectVerifyResult");
+      if (panel) {
+        panel.style.display = "none";
+        panel.innerHTML = "";
+      }
+      if (out) out.textContent = "Signed KSK loaded. Verify ESP32 compatibility before binding.";
+      if (typeof showToast === "function") showToast("Signed KSK loaded", "info");
+      ffUpdateDetectButtons();
+    };
+    reader.onerror = () => {
+      if (typeof showToast === "function") showToast("Could not read .ksk file", "error");
+    };
+    reader.readAsText(file);
+  };
+
+  function ffDetectErrorMessage(d) {
+    const code = (d && d.code) || "";
+    const msg = (d && d.message) || "";
+    if (code === "MISSING_SIGNED_KSK" || /signed ksk|license id alone|load the signed/i.test(msg)) {
+      return "Invalid KSK input. Please load the signed .ksk license file.";
+    }
+    if (code === "INVALID_FORMAT") {
+      return "Invalid KSK license. Please load a valid signed .ksk file.";
+    }
+    if (code === "INVALID_SIGNATURE") {
+      return "KSK signature verification failed.";
+    }
+    if (code === "INVALID_IDENTITY") {
+      return "ESP identity does not match this KSK.";
+    }
+    if (code === "ROUTER_DEVICE_MISMATCH") {
+      return "This KSK is bound to another Router Device ID.";
+    }
+    if (code === "MANUAL_KSK_REJECTED") {
+      return "Signed KSK file required.";
+    }
+    if (code === "EXPIRED") {
+      return "KSK license has expired.";
+    }
+    if (code === "GRACE_EXHAUSTED" || /grace|replacement limit/i.test(msg)) {
+      return "KSK replacement limit reached.";
+    }
+    return msg || "Request failed";
+  }
+
+  function ffBuildKskBody(parsed, mac, name) {
+    return {
+      ksk: parsed.raw,
+      ksk_b64: ffUtf8ToB64(parsed.raw),
+      mac: mac || "",
+      chip_id: parsed.license.chip_id || "",
+      license_id: parsed.license.license_id || "",
+      name: name || "",
+    };
+  }
+
+  window.verifyEspKskCompatibility = function () {
+    const macEl = document.getElementById("detectEspMac");
+    let mac = (macEl?.value || "").trim();
+    const name = (document.getElementById("detectEspName")?.value || "").trim();
+    const out = document.getElementById("detectEspResult");
+    const parsed = (window._espKskState && window._espKskState.parsed) || null;
+    if (!parsed) {
+      if (out) out.textContent = "Signed KSK file required.";
+      if (typeof showToast === "function") showToast("Signed KSK file required.", "warning");
+      return;
+    }
+    if (!mac && parsed.license.mac) {
+      mac = String(parsed.license.mac);
+      if (macEl) macEl.value = mac;
+    }
+    if (out) out.textContent = "Verifying ESP32 license compatibility…";
+
+    const runVerify = (macToUse) => {
+      const body = ffBuildKskBody(parsed, macToUse, name);
+      return fetch("/cgi-bin/api?action=esp_license_verify", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.status === "need_pick") {
+            ffFillMacCandidates(d.candidates || [], d.suggested_mac || "");
+            if (typeof showToast === "function") showToast(d.message || "Pick an ESP MAC", "warning");
+            return;
+          }
+          if (d.status !== "ok") {
+            window._espKskState.verified = false;
+            window._espKskState.verifyResult = null;
+            ffUpdateDetectButtons();
+            const friendly = ffDetectErrorMessage(d);
+            ffSetKskUiStates("✓ Loaded", "Failed", "Not bound");
+            ffShowVerifyPanel(ffEscHtml(friendly), false);
+            if (out) out.textContent = friendly;
+            if (typeof showToast === "function") showToast(friendly, "error");
+            return;
+          }
+          window._espKskState.verified = true;
+          window._espKskState.verifyResult = d;
+          window._espKskState.verifyToken = String(Date.now());
+          if (d.mac && macEl) macEl.value = d.mac;
+          let html =
+            "<div class=\"fw-bold\">✓ ESP32 License Compatibility Verified</div>" +
+            "<div>License: <span class=\"font-monospace\">" +
+            ffEscHtml(d.license_id || "") +
+            "</span></div>" +
+            "<div>ESP MAC: <span class=\"font-monospace\">" +
+            ffEscHtml(d.mac || "") +
+            "</span></div>" +
+            "<div>Signature: Valid · Identity: Matched · Expiry: " +
+            ffEscHtml(d.expiry === "never" ? "Valid (never)" : "Valid") +
+            "</div>";
+          if (d.code === "ALREADY_BOUND_SAME") {
+            html +=
+              "<div class=\"mt-1\">License already exists and is already bound to this ESP.</div>";
+            ffSetKskUiStates("✓ Loaded", "✓ Verified", "✓ Already bound");
+          } else if (d.code === "ALREADY_BOUND_OTHER") {
+            html +=
+              "<div class=\"mt-1\">License already exists and is currently bound to another ESP.</div>" +
+              "<div>Current Live ESP: <span class=\"font-monospace\">" +
+              ffEscHtml(d.current_live_mac || "") +
+              "</span></div>" +
+              "<div>Detected ESP: <span class=\"font-monospace\">" +
+              ffEscHtml(d.detected_mac || d.mac || "") +
+              "</span></div>" +
+              "<div class=\"mt-1\">A second ESP cannot inherit this license. Unbind the live device, or buy a new KSK for this board.</div>";
+            ffSetKskUiStates("✓ Loaded", "✓ Verified", "Blocked (other ESP)");
+          } else if (d.code === "EXISTS_UNBOUND" || d.code === "EXISTS_PLACEHOLDER") {
+            html += "<div class=\"mt-1\">" + ffEscHtml(d.message || "License already exists.") + "</div>";
+            ffSetKskUiStates("✓ Loaded", "✓ Verified", "Ready to Bind");
+          } else {
+            html += "<div class=\"mt-1\">Status: Ready to Bind</div>";
+            ffSetKskUiStates("✓ Loaded", "✓ Verified", "Ready to Bind");
+          }
+          ffShowVerifyPanel(html, true);
+          if (out) out.textContent = d.message || "Verified";
+          if (typeof showToast === "function") showToast(d.message || "Verified", "success");
+          ffUpdateDetectButtons();
+        });
+    };
+
+    const start = !mac
+      ? fetch("/cgi-bin/api?action=esp_scan", { credentials: "include" })
+          .then((r) => r.json())
+          .then((scan) => {
+            if (scan.suggested_mac) {
+              mac = scan.suggested_mac;
+              if (macEl) macEl.value = mac;
+            }
+            if (scan.candidates && scan.candidates.length) {
+              ffFillMacCandidates(scan.candidates, scan.suggested_mac || "");
+            }
+            if (!mac && parsed.license.mac) {
+              mac = String(parsed.license.mac);
+              if (macEl) macEl.value = mac;
+            }
+            if (!mac) {
+              if (out) out.textContent = scan.message || "No ESP found on LAN — enter ESP MAC or Find MAC.";
+              if (typeof showToast === "function") showToast(scan.message || "No ESP MAC found", "warning");
+              return null;
+            }
+            return runVerify(mac);
+          })
+      : runVerify(mac);
+
+    Promise.resolve(start).catch((e) => {
+      if (out) out.textContent = String(e);
+    });
+  };
+
+  window.bindEspKsk = function () {
+    const st = window._espKskState || {};
+    const out = document.getElementById("detectEspResult");
+    if (!st.verified || !st.parsed || !st.verifyResult || !st.verifyResult.ready_to_bind) {
+      if (out) out.textContent = "Verify ESP32 compatibility before binding.";
+      if (typeof showToast === "function") showToast("Verify compatibility first", "warning");
+      return;
+    }
+    if (st.verifyResult.already_bound) {
+      if (out) out.textContent = "License already exists and is already bound to this ESP.";
+      return;
+    }
+    if (window._espBindBusy) return;
+    window._espBindBusy = true;
+    ffUpdateDetectButtons();
+    const macEl = document.getElementById("detectEspMac");
+    const mac = (macEl?.value || "").trim() || st.verifyResult.mac || "";
+    const name = (document.getElementById("detectEspName")?.value || "").trim();
+    if (out) out.textContent = "Binding ESP32 (server re-checks license)…";
+    const body = ffBuildKskBody(st.parsed, mac, name);
+    fetch("/cgi-bin/api?action=esp_detect", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        window._espBindBusy = false;
+        if (d.status !== "ok") {
+          const friendly = ffDetectErrorMessage(d);
+          ffSetKskUiStates("✓ Loaded", "Re-verify required", "Bind failed");
+          if (out) out.textContent = friendly;
+          if (typeof showToast === "function") showToast(friendly, "error");
+          // Force re-verify before another bind attempt. Keep the loaded license.
+          window._espKskState.verified = false;
+          window._espKskState.verifyResult = null;
+          ffUpdateDetectButtons();
+          return;
+        }
+        const boundMsg = d.message || "ESP32 bound successfully.";
+        window.clearDetectKsk();
+        if (out) out.textContent = boundMsg;
+        if (typeof showToast === "function") showToast(boundMsg, "success");
+        loadESPDevices();
+        loadLicensePool();
+      })
+      .catch((e) => {
+        window._espBindBusy = false;
+        ffSetKskUiStates("✓ Loaded", "Re-verify required", "Bind failed");
+        window._espKskState.verified = false;
+        window._espKskState.verifyResult = null;
+        if (out) out.textContent = String(e);
+        ffUpdateDetectButtons();
+      });
+  };
+
+  // Legacy alias: old Detect button / helpers now mean Verify.
+  window.detectESP32 = function () {
+    return window.verifyEspKskCompatibility();
+  };
+
+  window.focusBindEspWorkflow = function (macHint) {
+    const card = document.getElementById("detectBindEspCard");
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (macHint) {
+      const macEl = document.getElementById("detectEspMac");
+      if (macEl) macEl.value = macHint;
+    }
+    const out = document.getElementById("detectEspResult");
+    if (out) out.textContent = "Load the signed .ksk for this license, Verify compatibility, then BIND ESP32.";
+    document.getElementById("detectKskFile")?.focus();
+  };
+
+  window.unbindKskLicense = function (licenseId) {
+    if (!licenseId) return;
+    if (!confirm("Unbind this ESP from " + licenseId + "?\n\nClears the live binding and slot license flags. Signed .ksk is retained; the device stays in Registered until Delete.")) return;
+    fetch(
+      "/cgi-bin/api?action=esp_license_unbind&license_id=" + encodeURIComponent(licenseId),
+      { credentials: "include" }
+    )
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof showToast === "function") {
+          showToast(d.message || (d.status === "ok" ? "Unbound" : "Failed"), d.status === "ok" ? "success" : "error");
         }
         if (d.status === "ok") {
           loadESPDevices();
@@ -2109,7 +2852,7 @@
         }
       })
       .catch((e) => {
-        if (out) out.textContent = String(e);
+        if (typeof showToast === "function") showToast(String(e), "error");
       });
   };
 
@@ -2124,36 +2867,56 @@
         if (usedEl) usedEl.textContent = String(rows.length);
         if (!rows.length) {
           tb.innerHTML =
-            '<tr><td colspan="6" class="text-center py-3 text-muted">No ESP32 licenses yet — Detect an ESP or Register a KSK ID</td></tr>';
+            '<tr><td colspan="6" class="text-center py-3 text-muted">No ESP32 licenses yet — Load a signed .ksk, Verify, then Bind</td></tr>';
           return;
         }
         tb.innerHTML = rows
           .map((lic) => {
             const lid = lic.license_id || lic.license_key || "—";
-            const grace = (lic.grace_used || 0) + " / " + (lic.grace_max || 3);
-            const live = lic.live_mac || lic.slot_mac || "—";
+            const live = lic.live_mac || "";
+            const boundMac = live || lic.last_live_mac || "";
             const st = lic.status || "—";
+            const graceN = Number(lic.grace_used || 0);
+            const ever = Number(lic.ksk_ever_bound || 0);
+            const hasSigned = !!(lic.has_signed_ksk || (lic.signed_ksk && String(lic.signed_ksk).trim()));
+            const canRemove = st === "available" && graceN === 0 && ever === 0 && !hasSigned;
+            const isActive = (st === "used" || st === "active") && !!live;
             const badge =
-              st === "used"
+              isActive
                 ? '<span class="badge bg-success">Active</span>'
                 : '<span class="badge bg-secondary">' + ffEscHtml(st) + "</span>";
+            let action = "—";
+            if (isActive) {
+              action =
+                '<button type="button" class="btn btn-sm btn-outline-warning" onclick="unbindKskLicense(\'' +
+                ffEscHtml(lid).replace(/'/g, "\\'") +
+                "')\">Unbind</button>";
+            } else if (canRemove) {
+              action =
+                '<button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLicenseFromPool(' +
+                lic.id +
+                ')">Remove</button>';
+            } else if (st === "available" || st === "unbound") {
+              action =
+                '<button type="button" class="btn btn-sm btn-outline-primary" onclick="focusBindEspWorkflow(\'' +
+                ffEscHtml(boundMac).replace(/'/g, "\\'") +
+                "')\">Bind</button>";
+            } else if (hasSigned || ever > 0) {
+              action = '<span class="small text-muted">History kept</span>';
+            }
             return (
               '<tr><td class="font-monospace small">' +
               ffEscHtml(lid) +
               "</td><td>" +
               badge +
               '</td><td class="font-monospace small">' +
-              ffEscHtml(live) +
-              "</td><td>" +
-              ffEscHtml(grace) +
+              ffEscHtml(live || "—") +
+              '</td><td class="font-monospace small">' +
+              ffEscHtml(boundMac || "—") +
               '</td><td class="small text-muted">' +
               ffEscHtml(lic.used_at || "—") +
               "</td><td>" +
-              (st === "available"
-                ? '<button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLicenseFromPool(' +
-                  lic.id +
-                  ')">Remove</button>'
-                : "—") +
+              action +
               "</td></tr>"
             );
           })
@@ -2164,21 +2927,24 @@
       });
   };
 
-  window.addLicenseToPool = function () {
-    const key = (document.getElementById("newLicenseKey")?.value || "").trim();
-    if (!key) {
-      if (typeof showToast === "function") showToast("Enter a KSK license ID", "warning");
-      return;
+  window.removeLicenseFromPool = function (licenseId) {
+    if (!licenseId) return;
+    if (typeof window.removeLicense === "function") {
+      return window.removeLicense(licenseId);
     }
-    fetch("/cgi-bin/api?action=esp_license_add&key=" + encodeURIComponent(key), { credentials: "include" })
+    if (!confirm("Remove this unused license registration? Binding history is never reset by Remove.")) return;
+    fetch("/cgi-bin/api?action=esp_license_remove&id=" + encodeURIComponent(licenseId), {
+      credentials: "include",
+    })
       .then((r) => r.json())
       .then((d) => {
-        if (typeof showToast === "function") showToast(d.message || d.status, d.status === "ok" ? "success" : "error");
-        if (d.status === "ok") {
-          const inp = document.getElementById("newLicenseKey");
-          if (inp) inp.value = "";
-          loadLicensePool();
+        if (typeof showToast === "function") {
+          showToast(d.message || (d.status === "ok" ? "Removed" : "Failed"), d.status === "ok" ? "success" : "error");
         }
+        if (d.status === "ok") loadLicensePool();
+      })
+      .catch((e) => {
+        if (typeof showToast === "function") showToast(String(e), "error");
       });
   };
 
@@ -2201,35 +2967,45 @@
             if (esp.slot_mac === "gpio-coinslot") return;
             totalCount++;
             let licenseBadge = "";
-            let actionBtn = "";
+            let statusBadge = "";
             const licId = esp.license_id || esp.license_key || "";
             if (esp.license_status === "licensed" || esp.license_status === "free") {
               licenseBadge =
                 '<span class="badge bg-success">LICENSED</span>' +
                 (licId ? '<div class="font-monospace small text-muted mt-1">' + ffEscHtml(licId) + "</div>" : "");
-              actionBtn =
+              statusBadge =
                 esp.status === "online"
                   ? '<span class="badge bg-success">Coin ready</span>'
                   : '<span class="badge bg-warning text-dark">Offline</span>';
             } else if (esp.license_status === "inactive_replaced") {
               licenseBadge = '<span class="badge bg-secondary">REPLACED</span>';
-              actionBtn = "—";
+              statusBadge = "—";
             } else {
               licenseBadge = '<span class="badge bg-danger">UNLICENSED</span>';
-              actionBtn =
-                '<button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById(\'detectEspMac\').value=\'' +
-                ffEscHtml(esp.slot_mac) +
-                "';document.getElementById('detectLicenseId').focus()\">Detect…</button>";
+              statusBadge =
+                '<button type="button" class="btn btn-primary btn-sm" onclick="focusBindEspWorkflow(\'' +
+                ffEscHtml(esp.slot_mac).replace(/'/g, "\\'") +
+                "')\">Bind…</button>";
             }
+            const delMeta =
+              "{name:'" +
+              ffEscHtml(esp.slot_name || "ESP32").replace(/'/g, "\\'") +
+              "',mac:'" +
+              ffEscHtml(esp.slot_mac || "").replace(/'/g, "\\'") +
+              "',license:'" +
+              ffEscHtml(licId || "").replace(/'/g, "\\'") +
+              "'}";
             const adminActions =
               '<button type="button" class="btn btn-outline-primary btn-sm" onclick="renameESPSlot(' +
               esp.id +
               ", '" +
-              ffEscHtml(esp.slot_name || "ESP") +
-              "')\">Rename</button> " +
+              ffEscHtml(esp.slot_name || "ESP").replace(/'/g, "\\'") +
+              "')\">Rename</button>" +
               '<button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteESPDevice(' +
               esp.id +
-              ')">Del</button>';
+              ", false, " +
+              delMeta +
+              ')">Delete</button>';
             html +=
               "<tr><td>" +
               esp.id +
@@ -2244,8 +3020,7 @@
               '</td><td class="small">' +
               (typeof formatLastSeen === "function" ? formatLastSeen(esp.last_seen) : esp.last_seen || "—") +
               '</td><td><div class="ff-action-btns">' +
-              actionBtn +
-              " " +
+              statusBadge +
               adminActions +
               "</div></td></tr>";
           });
@@ -2254,7 +3029,7 @@
         if (tb) {
           tb.innerHTML =
             html ||
-            '<tr><td colspan="7" class="text-center text-muted py-3">No ESP32 devices yet — Detect ESP32 to bind</td></tr>';
+            '<tr><td colspan="7" class="text-center text-muted py-3">No ESP32 devices yet — Load .ksk, Verify, then Bind</td></tr>';
         }
       })
       .catch(() => {
@@ -2265,14 +3040,17 @@
 
   window.freeESPLicense = function () {
     if (typeof showToast === "function") {
-      showToast("Use replacement flasher + Detect ESP32 (grace ≤ 3). Free License removed.", "info");
+      showToast("Use replacement flasher + Verify/Bind ESP32 (grace ≤ 3).", "info");
     }
   };
 
   window.bindESPLicense = function () {
-    if (typeof showToast === "function") showToast("Enter License ID and click Detect ESP32", "info");
-    document.getElementById("detectLicenseId")?.focus();
+    focusBindEspWorkflow("");
   };
+
+  document.addEventListener("DOMContentLoaded", () => {
+    ffUpdateDetectButtons();
+  });
 
   // ---- Sales page: dual charts + modern date popovers ----
   function ffChartTickColor() {
@@ -2598,16 +3376,411 @@
     });
   }
 
+  function ffMoney(n) {
+    return "PHP " + Math.round(Number(n) || 0).toLocaleString("en-PH");
+  }
+  function ffScopeLabel() {
+    const sel = document.getElementById("salesVendoFilter");
+    const opt = sel && sel.options[sel.selectedIndex];
+    return (opt && opt.textContent.trim()) || "Overall";
+  }
+  function ffVendoName(id) {
+    const n = Number(id) || 0;
+    if (!n) return "Main Router";
+    const sel = document.getElementById("salesVendoFilter");
+    if (sel) {
+      for (let i = 0; i < sel.options.length; i++) {
+        if (String(sel.options[i].value) === String(n)) return sel.options[i].textContent.trim();
+      }
+    }
+    return "Sub Vendo " + n;
+  }
+  function ffResultLine(rep) {
+    const month = Number(rep.monthly) || 0;
+    const prev = Number(rep.prev_monthly) || 0;
+    const diff = month - prev;
+    if ((Number(rep.total) || 0) <= 0) return "No income recorded for this scope.";
+    if (diff > 0) return "Income is up by " + ffMoney(diff) + " compared with last month.";
+    if (diff < 0) return "Income is down by " + ffMoney(Math.abs(diff)) + " compared with last month.";
+    return "Income this month matches last month.";
+  }
+  function ffReportLines(rep) {
+    const when = new Date((Number(rep.generated_at) || Date.now() / 1000) * 1000);
+    const rows = asArr(rep.rows);
+    const lines = [
+      "CEBJ.NET",
+      "Piso WiFi income report",
+      "Scope: " + ffScopeLabel(),
+      "Generated: " + when.toLocaleString(),
+      "",
+      "MONEY COLLECTED",
+      "Today: " + ffMoney(rep.daily),
+      "This week: " + ffMoney(rep.weekly),
+      "This month: " + ffMoney(rep.monthly),
+      "All recorded: " + ffMoney(rep.total),
+      "",
+      "THIS MONTH",
+      "Transactions: " + (Number(rep.month_count) || 0),
+      "Coins: " + (Number(rep.month_coins) || 0),
+      "Average sale: " + ffMoney(rep.month_avg),
+      "Last month: " + ffMoney(rep.prev_monthly),
+      "",
+      "RESULT",
+      ffResultLine(rep),
+      "Rent, load, and other bills are not stored on this router.",
+      "This figure is money collected from coins and vouchers.",
+      "",
+      "RECENT TRANSACTIONS",
+      "Date | MAC | Coins | Amount | Where",
+    ];
+    if (!rows.length) lines.push("No transactions recorded.");
+    rows.forEach((r) => {
+      const at = new Date((Number(r.created_at) || 0) * 1000);
+      lines.push(
+        [at.toLocaleString(), r.mac || "", String(r.coins || 0), ffMoney(r.amount), ffVendoName(r.sub_vendo_id)].join(" | ")
+      );
+    });
+    return lines;
+  }
+  function ffPdfEscape(s) {
+    return String(s == null ? "" : s)
+      .replace(/[^\x20-\x7E]/g, " ")
+      .replace(/\\/g, "\\\\")
+      .replace(/\(/g, "\\(")
+      .replace(/\)/g, "\\)");
+  }
+  function ffPdfBytes(pages) {
+    let body = "%PDF-1.4\n";
+    const offsets = [0];
+    const put = (n, data) => {
+      offsets[n] = body.length;
+      body += n + " 0 obj\n" + data + "\nendobj\n";
+    };
+    const kids = pages.map((_, i) => 6 + i * 2 + " 0 R");
+    put(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    put(2, "<< /Type /Pages /Count " + pages.length + " /Kids [" + kids.join(" ") + "] >>");
+    put(3, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    put(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
+    pages.forEach((content, i) => {
+      const cid = 5 + i * 2;
+      const pid = 6 + i * 2;
+      put(cid, "<< /Length " + content.length + " >>\nstream\n" + content + "\nendstream");
+      put(pid, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents " + cid + " 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> >>");
+    });
+    const start = body.length;
+    const count = 4 + pages.length * 2;
+    body += "xref\n0 " + (count + 1) + "\n0000000000 65535 f \n";
+    for (let n = 1; n <= count; n++) body += String(offsets[n]).padStart(10, "0") + " 00000 n \n";
+    body += "trailer << /Size " + (count + 1) + " /Root 1 0 R >>\nstartxref\n" + start + "\n%%EOF";
+    return body;
+  }
+  function ffLinesToPdf(lines) {
+    const pages = [];
+    let cmds = [];
+    let y = 786;
+    const flush = () => {
+      if (!cmds.length) return;
+      pages.push("0.09 0.16 0.35 rg 0 808 595 34 re f\n0 g\n" + cmds.join("\n"));
+      cmds = [];
+      y = 786;
+    };
+    lines.forEach((raw, idx) => {
+      const text = String(raw || "");
+      const bold = idx < 2 || text === "MONEY COLLECTED" || text === "THIS MONTH" || text === "RESULT" || text === "RECENT TRANSACTIONS";
+      const size = idx === 0 ? 18 : idx === 1 ? 13 : bold ? 12 : 10;
+      const gap = text === "" ? 10 : size + 6;
+      if (y < 48 + gap) flush();
+      if (text !== "") {
+        cmds.push("BT /" + (bold ? "F2" : "F1") + " " + size + " Tf 40 " + y + " Td (" + ffPdfEscape(text).slice(0, 110) + ") Tj ET");
+      }
+      y -= gap;
+    });
+    flush();
+    if (!pages.length) pages.push("BT /F1 12 Tf 40 780 Td (CEBJ.NET) Tj ET");
+    return ffPdfBytes(pages);
+  }
+  function ffDownloadText(name, text, type) {
+    const blob = new Blob([text], { type: type || "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  }
+  window.ffLoadSalesVendos = function () {
+    const group = document.getElementById("salesVendoGroup");
+    if (!group) return Promise.resolve();
+    const current = document.getElementById("salesVendoFilter")?.value || "all";
+    return api("list_esp_devices").then((data) => {
+      const devices = asArr(data.esp_devices);
+      group.innerHTML = devices.length
+        ? devices
+            .map((d) => {
+              const name = (d.slot_name || "Sub Vendo " + d.id).trim();
+              return `<option value="${Number(d.id) || 0}">${esc(name)}</option>`;
+            })
+            .join("")
+        : '<option value="" disabled>No sub vendo yet</option>';
+      const sel = document.getElementById("salesVendoFilter");
+      if (sel && current) sel.value = current;
+    }).catch(() => {});
+  };
+  window.ffSalesScopeChanged = function () {
+    if (typeof loadAllSales === "function") loadAllSales();
+    if (typeof loadSalesHistory === "function") loadSalesHistory();
+  };
+  window.ffExportSales = function () {
+    const kind = (document.getElementById("salesExportKind") || {}).value || "pdf";
+    api("sales_report").then((rep) => {
+      if (!rep || rep.status === "error") {
+        toast((rep && rep.message) || "Could not build the report", "error");
+        return;
+      }
+      const lines = ffReportLines(rep);
+      const stamp = new Date().toISOString().slice(0, 10);
+      const scope = ffScopeLabel().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "overall";
+      if (kind === "csv") {
+        const csv = "\uFEFF" + lines.map((line) => '"' + String(line).replace(/"/g, '""') + '"').join("\r\n") + "\r\n";
+        ffDownloadText("cebj-income-" + stamp + "-" + scope + ".csv", csv, "text/csv;charset=utf-8");
+      } else {
+        ffDownloadText("cebj-income-" + stamp + "-" + scope + ".pdf", ffLinesToPdf(lines), "application/pdf");
+      }
+      toast("Report downloaded", "success");
+    }).catch(() => toast("Could not build the report", "error"));
+  };
+  window.exportSales = function () { window.ffExportSales(); };
+  window.ffQuickAction = function (key) {
+    const go = {
+      update: () => typeof showUpdate === "function" && showUpdate(),
+      sales: () => typeof showSales === "function" && showSales(),
+      sessions: () => typeof showSessions === "function" && showSessions(),
+      ap: () => typeof showAccessPoints === "function" && showAccessPoints(),
+      vouchers: () => typeof showVouchers === "function" && showVouchers(),
+      vendo: () => typeof showESPSlots === "function" && showESPSlots(),
+      network: () => typeof showNetwork === "function" && showNetwork(),
+      reboot: () => typeof confirmReboot === "function" && confirmReboot(),
+    };
+    if (go[key]) go[key]();
+  };
+
   const _ffShowSales = typeof window.showSales === "function" ? window.showSales : null;
   window.showSales = function () {
     if (_ffShowSales) _ffShowSales.apply(this, arguments);
     else if (typeof window.showSection === "function") window.showSection("salesSection");
     setTimeout(() => {
       ffInitSalesDatePickers();
+      ffLoadSalesVendos();
       if (typeof hydrateIcons === "function") hydrateIcons();
       if (typeof loadSalesChart === "function") loadSalesChart();
     }, 50);
   };
+
+  function ffSetGcashReady(id, value, ok) {
+    const card = document.getElementById(id);
+    const val = document.getElementById(id + "Val");
+    if (val) val.textContent = value;
+    if (!card) return;
+    card.classList.toggle("is-ok", !!ok);
+    card.classList.toggle("is-warn", !ok);
+  }
+
+  window.ffPortalFileChanged = function (input, labelId) {
+    const nameEl = document.getElementById(labelId);
+    const file = input && input.files && input.files[0];
+    if (!nameEl) return;
+    if (file) {
+      nameEl.textContent = file.name;
+      nameEl.classList.add("has-file");
+      nameEl.title = file.name;
+    } else {
+      nameEl.textContent = "No file chosen";
+      nameEl.classList.remove("has-file");
+      nameEl.title = "";
+    }
+    if (typeof hydrateIcons === "function") hydrateIcons();
+  };
+
+  window.ffGcashQrFileChanged = function (input) {
+    window.ffPortalFileChanged(input, "gcashQrFileName");
+  };
+
+  window.ffSyncGcashEnableBtn = function () {
+    const chk = document.getElementById("gcashEnabled");
+    const btn = document.getElementById("gcashEnableBtn");
+    if (!chk || !btn) return;
+    const on = !!chk.checked;
+    btn.classList.toggle("is-on", on);
+    btn.textContent = on ? "GCash Enabled" : "Enable GCash";
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  };
+
+  window.ffToggleGcashEnabled = function () {
+    const chk = document.getElementById("gcashEnabled");
+    if (!chk) return;
+    const next = !chk.checked;
+    chk.checked = next;
+    window.ffSyncGcashEnableBtn();
+
+    const g = (id) => document.getElementById(id);
+    const params = new URLSearchParams({
+      action: "gcash_config_set",
+      enabled: next ? "1" : "0",
+      freewindow_enabled: g("gcashFreewindowEnabled")?.checked ? "1" : "0",
+      gcash_number: g("gcashNumber")?.value || "",
+      gcash_qr: g("gcashQr")?.value || "",
+      voucher_expiry_days: g("gcashVoucherExpiry")?.value || "0",
+    });
+
+    fetch("/cgi-bin/api?" + params.toString(), { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data || data.status !== "ok") {
+          chk.checked = !next;
+          window.ffSyncGcashEnableBtn();
+          if (typeof showToast === "function") {
+            showToast((data && data.message) || "Could not update GCash", "error");
+          }
+          return;
+        }
+        if (typeof showToast === "function") {
+          showToast(next ? "GCash enabled" : "GCash disabled", next ? "success" : "error");
+        }
+        const secretVal = (g("gcashSecretDisplay")?.value || "").trim();
+        window.updateGcashReadyCards({
+          enabled: next,
+          gcash_number: g("gcashNumber")?.value || "",
+          gcash_qr: g("gcashQr")?.value || "",
+          has_secret: !!secretVal && !/^not generated$/i.test(secretVal),
+          pool: [],
+        });
+        // Refresh inventory only — do not wipe enable button state
+        fetch("/cgi-bin/api?action=gcash_config_get", { credentials: "include", cache: "no-store" })
+          .then((r) => r.json())
+          .then((cfg) => {
+            if (!cfg || cfg.status !== "ok") return;
+            chk.checked = !!(cfg.enabled === true || cfg.enabled === 1 || cfg.enabled === "1");
+            window.ffSyncGcashEnableBtn();
+            if (typeof renderGcashPool === "function") renderGcashPool(cfg.pool || []);
+            window.updateGcashReadyCards(cfg);
+          })
+          .catch(() => {});
+      })
+      .catch(() => {
+        chk.checked = !next;
+        window.ffSyncGcashEnableBtn();
+        if (typeof showToast === "function") showToast("Network error", "error");
+      });
+  };
+
+  window.updateGcashReadyCards = function (data) {
+    const enabled = !!(
+      data &&
+      (data.enabled === true || data.enabled === 1 || data.enabled === "1")
+    );
+    const number = ((data && data.gcash_number) || "").trim();
+    const qr = ((data && data.gcash_qr) || "").trim();
+    const hasSecret = !!(data && data.has_secret);
+    const pool = (data && data.pool) || [];
+    const available = pool.reduce((n, p) => n + (Number(p.active) || 0), 0);
+    ffSetGcashReady("gcashReadyEnabled", enabled ? "Enabled" : "Off", enabled);
+    ffSetGcashReady("gcashReadyPay", number || (qr ? "QR only" : "Missing"), !!(number || qr));
+    ffSetGcashReady("gcashReadySecret", hasSecret ? "Ready" : "Missing", hasSecret);
+    ffSetGcashReady("gcashReadyPool", String(available), available > 0);
+    const chk = document.getElementById("gcashEnabled");
+    if (chk && data && Object.prototype.hasOwnProperty.call(data, "enabled")) {
+      chk.checked = enabled;
+    }
+    window.ffSyncGcashEnableBtn();
+  };
+
+  function ffEnhanceGcashPage() {
+    window.loadGcashConfig = function () {
+      fetch("/cgi-bin/api?action=gcash_config_get", { credentials: "include", cache: "no-store" })
+        .then((r) => r.json())
+        .then((data) => {
+          if (!data || data.status !== "ok") return;
+          const set = (id, v) => {
+            const el = document.getElementById(id);
+            if (el) el.value = v;
+          };
+          const chk = (id, v) => {
+            const el = document.getElementById(id);
+            if (el) el.checked = !!v;
+          };
+          chk("gcashEnabled", data.enabled === true || data.enabled === 1 || data.enabled === "1");
+          window.ffSyncGcashEnableBtn();
+          chk("gcashFreewindowEnabled", data.freewindow_enabled === true || data.freewindow_enabled === 1 || data.freewindow_enabled === "1");
+          set("gcashNumber", data.gcash_number || "");
+          set("gcashQr", data.gcash_qr || "");
+          set("gcashVoucherExpiry", data.voucher_expiry_days ?? 0);
+          const qrPrev = document.getElementById("gcashQrPreview");
+          if (qrPrev) {
+            const qr = data.gcash_qr || "";
+            if (qr) {
+              qrPrev.src = qr;
+              qrPrev.style.display = "block";
+            } else {
+              qrPrev.src = "";
+              qrPrev.style.display = "none";
+            }
+          }
+          const secDisp = document.getElementById("gcashSecretDisplay");
+          if (secDisp) {
+            secDisp.value = data.has_secret
+              ? "Set (hidden — Generate to view a new one)"
+              : "Not generated";
+          }
+          if (typeof renderGcashPool === "function") renderGcashPool(data.pool || []);
+          window.updateGcashReadyCards(data);
+          if (typeof hydrateIcons === "function") hydrateIcons();
+        })
+        .catch((e) => console.warn("loadGcashConfig failed:", e));
+    };
+
+    const afterMutate = () => {
+      if (typeof window.loadGcashConfig === "function") window.loadGcashConfig();
+    };
+    // Do NOT wrap generateGcashSecret — reload would hide the one-time plaintext secret.
+    ["generateGcashPool", "saveGcashConfig", "uploadGcashQr"].forEach((name) => {
+      const fn = window[name];
+      if (typeof fn !== "function" || fn._ffReadyBound) return;
+      window[name] = function () {
+        const ret = fn.apply(this, arguments);
+        setTimeout(afterMutate, 700);
+        return ret;
+      };
+      window[name]._ffReadyBound = true;
+    });
+    if (typeof window.generateGcashSecret === "function" && !window.generateGcashSecret._ffReadyBound) {
+      const genSecret = window.generateGcashSecret;
+      window.generateGcashSecret = function () {
+        const ret = genSecret.apply(this, arguments);
+        setTimeout(() => {
+          window.updateGcashReadyCards({
+            enabled: document.getElementById("gcashEnabled")?.checked,
+            gcash_number: document.getElementById("gcashNumber")?.value,
+            gcash_qr: document.getElementById("gcashQr")?.value,
+            has_secret: true,
+            pool: [],
+          });
+          // Refresh pool counts only (leave secret display alone)
+          fetch("/cgi-bin/api?action=gcash_config_get", { credentials: "include", cache: "no-store" })
+            .then((r) => r.json())
+            .then((data) => {
+              if (data && data.status === "ok") {
+                if (typeof renderGcashPool === "function") renderGcashPool(data.pool || []);
+                window.updateGcashReadyCards({ ...data, has_secret: true });
+              }
+            })
+            .catch(() => {});
+        }, 500);
+        return ret;
+      };
+      window.generateGcashSecret._ffReadyBound = true;
+    }
+  }
 
   document.addEventListener("DOMContentLoaded", () => {
     if (localStorage.getItem("fastfi_admin_logged") === "yes") {
@@ -2620,5 +3793,498 @@
       }, 800);
     }
     ffInitSalesDatePickers();
+    ffEnhanceGcashPage();
+    ffBindOtaPage();
   });
 })();
+
+function ffBindOtaPage() {
+  var card = document.getElementById("otaReleaseCard");
+  var btnCheck = document.getElementById("btnOTA_Check");
+  if (!card || !btnCheck) return;
+  var btnProceed = document.getElementById("btnOTA_Proceed");
+  if (btnProceed) {
+    btnProceed.onclick = function () {
+      if (typeof ffConfirm !== "function") return;
+      ffConfirm("Apply this update now? The router will reboot and active sessions will disconnect.", {
+        title: "Apply Update",
+        okText: "Apply Update",
+        okClass: "btn btn-warning btn-sm",
+        onConfirm: function () {
+          btnProceed.disabled = true;
+          if (typeof window.ffBeginFlashLock === "function") window.ffBeginFlashLock("ota");
+          fetch("/cgi-bin/api?action=proceed_update", { method: "POST", credentials: "include" })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data && data.status === "ok") {
+                if (typeof window.ffMarkFlashAccepted === "function") {
+                  window.ffMarkFlashAccepted(data.message || "Applying update. Do not unplug.");
+                }
+              } else {
+                if (typeof window.ffEndFlashLock === "function") window.ffEndFlashLock();
+                btnProceed.disabled = false;
+                if (typeof showToast === "function") showToast((data && data.message) || "Update failed to start", "error");
+              }
+            })
+            .catch(function () {
+              if (typeof window.ffEndFlashLock === "function") window.ffEndFlashLock();
+              btnProceed.disabled = false;
+              if (typeof showToast === "function") showToast("Update failed to start.", "error");
+            });
+        }
+      });
+    };
+  }
+  card.style.display = "block";
+  fetch("/version.txt?t=" + Date.now())
+    .then(function (r) { return r.text(); })
+    .then(function (v) {
+      v = String(v || "").trim();
+      var cur = document.getElementById("otaCurrentVersion");
+      var label = document.getElementById("currentVersionLabel");
+      if (v && cur) cur.textContent = v;
+      if (v && label && (label.textContent === "--" || !label.textContent)) label.textContent = v;
+    })
+    .catch(function () {});
+
+  function esc(s) {
+    return String(s || "").replace(/[&<>]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
+    });
+  }
+  function releaseLines(raw) {
+    var skip = false;
+    var out = [];
+    String(raw || "").replace(/\r/g, "").split("\n").forEach(function (rawLine) {
+      var line = rawLine.trim();
+      if (!line) return;
+      var heading = line.match(/^#{1,6}\s+(.+)$/);
+      if (heading) {
+        var title = heading[1].toLowerCase();
+        skip = /asset|flash|this router|contact/.test(title);
+        return;
+      }
+      if (skip || line.charAt(0) === "|" || /^contact:/i.test(line) || /^-{3,}$/.test(line)) return;
+      line = line.replace(/^[-*]\s+/, "").replace(/\*\*/g, "").replace(/`/g, "");
+      if (line) out.push(line);
+    });
+    return out;
+  }
+  function showRelease(data) {
+    card.style.display = "block";
+    var cur = document.getElementById("otaCurrentVersion");
+    var lat = document.getElementById("otaLatestVersion");
+    var badge = document.getElementById("otaUpdateStatus");
+    var notes = document.getElementById("otaReleaseNotes");
+    var label = document.getElementById("currentVersionLabel");
+    if (cur) cur.textContent = data.current || (label && label.textContent) || "--";
+    if (lat) lat.textContent = data.latest || data.version || "--";
+    if (notes) {
+      var items = releaseLines(data.notes);
+      if (!items.length && data.message) items = [String(data.message)];
+      if (!items.length) items = ["No release notes."];
+      notes.innerHTML = items.map(function (line) {
+        return '<li>' + esc(line) + "</li>";
+      }).join("");
+    }
+    if (!badge) return;
+    badge.className = "ota-status";
+    if (data.status === "available") {
+      badge.classList.add("is-available");
+      badge.textContent = "Update Available";
+    } else if (data.status === "uptodate") {
+      badge.classList.add("is-current");
+      badge.textContent = "Up to date";
+    } else {
+      badge.classList.add("is-fail");
+      badge.textContent = "Check failed";
+    }
+  }
+
+  btnCheck.onclick = function () {
+    btnCheck.disabled = true;
+    var btnProceed = document.getElementById("btnOTA_Proceed");
+    if (btnProceed) btnProceed.disabled = true;
+    fetch("/cgi-bin/api?action=check_update", { method: "POST", credentials: "include" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        data = data || {};
+        showRelease(data);
+        if (data.status === "uptodate") {
+          if (typeof setRollbackBusy === "function") setRollbackBusy(false);
+          if (typeof showToast === "function") showToast("Router is up to date", "info");
+        } else if (data.status === "available") {
+          if (typeof setRollbackBusy === "function") setRollbackBusy(true);
+          var container = document.getElementById("otaProgressContainer");
+          var bar = document.getElementById("otaProgressBar");
+          var label = document.getElementById("otaProgressLabel");
+          if (container) container.style.display = "block";
+          if (bar) bar.style.width = "10%";
+          if (label) label.textContent = "Contacting GitHub...";
+          if (typeof showToast === "function") showToast("Update available. Downloading…", "info");
+          if (window.otaLogInterval) clearInterval(window.otaLogInterval);
+          window.otaLogInterval = setInterval(function () {
+            fetch("/cgi-bin/api?action=update_progress&t=" + Date.now(), { credentials: "include" })
+              .then(function (r) { return r.json(); })
+              .then(function (prog) {
+                var text = (prog && prog.progress) || "";
+                if (!text) return;
+                var lines = text.trim().split("\n");
+                var lastLine = lines[lines.length - 1];
+                if (label && lastLine.indexOf("Download complete") === -1) {
+                  label.textContent = lastLine;
+                  if (bar && parseInt(bar.style.width, 10) < 90) {
+                    bar.style.width = (parseInt(bar.style.width, 10) + 5) + "%";
+                  }
+                }
+                if (text.indexOf("Download complete") !== -1) {
+                  if (typeof setRollbackBusy === "function") setRollbackBusy(false);
+                  if (btnProceed) btnProceed.disabled = false;
+                  if (bar) {
+                    bar.style.width = "100%";
+                    bar.classList.remove("progress-bar-animated");
+                  }
+                  if (label) label.textContent = "Download complete. Ready to flash.";
+                  clearInterval(window.otaLogInterval);
+                  if (typeof showToast === "function") showToast("Download complete. Ready to flash.", "success");
+                }
+              });
+          }, 1500);
+        } else if (typeof showToast === "function") {
+          if (typeof setRollbackBusy === "function") setRollbackBusy(false);
+          showToast(data.message || "Error checking update", "error");
+        }
+        if (data.status !== "available") btnCheck.disabled = false;
+      })
+      .catch(function () {
+        btnCheck.disabled = false;
+        showRelease({ status: "error", message: "Could not reach the router." });
+      });
+  };
+
+  var autoToggle = document.getElementById("otaAutoToggle");
+  var scheduleStatus = document.getElementById("otaScheduleStatus");
+  var releaseSelect = document.getElementById("otaReleaseSelect");
+  var selectedDetail = document.getElementById("otaSelectedDetail");
+  var rollbackStatus = document.getElementById("otaRollbackStatus");
+  var btnLoad = document.getElementById("btnOTA_Load");
+  var btnDownload = document.getElementById("btnOTA_Download");
+  var btnInstall = document.getElementById("btnOTA_Install");
+  var loadedTag = "";
+  var rollbackBusy = false;
+
+  function resultText(data) {
+    var result = (data && data.last_result) || "";
+    var when = (data && data.last_check) || "";
+    var detail = (data && data.detail) || "";
+    var clock = (data && String(data.clock_ok) === "0");
+    var line = "Scheduled time: 2:00 PM.";
+    if (clock || result === "clock_invalid") {
+      return line + " Router clock is not synchronized, so the 2:00 PM update did not run.";
+    }
+    if (!result) return line + " No scheduled check yet.";
+    var label = {
+      uptodate: "No newer release.",
+      installing: "Check started.",
+      error: "Check failed.",
+      deferred: "Deferred because customers are online.",
+      busy: "Skipped because another update is running.",
+      started: "Check started."
+    }[result] || result;
+    return line + " Last check" + (when ? " " + when : "") + ": " + (detail || label);
+  }
+
+  function paintSchedule(data) {
+    data = data || {};
+    if (autoToggle) autoToggle.checked = String(data.enabled) === "1" || data.enabled === 1;
+    if (scheduleStatus) scheduleStatus.textContent = resultText(data);
+  }
+
+  function setRollbackBusy(on) {
+    rollbackBusy = !!on;
+    if (btnCheck) btnCheck.disabled = rollbackBusy;
+    if (btnProceed && rollbackBusy) btnProceed.disabled = true;
+    if (btnLoad) btnLoad.disabled = rollbackBusy || !releaseSelect || !releaseSelect.value;
+    if (btnDownload) btnDownload.disabled = rollbackBusy || !loadedTag;
+    if (btnInstall && rollbackBusy) btnInstall.disabled = true;
+    if (autoToggle) autoToggle.disabled = rollbackBusy;
+    if (releaseSelect) releaseSelect.disabled = rollbackBusy;
+  }
+
+  function postAction(action, body) {
+    return fetch("/cgi-bin/api?action=" + action, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json(); });
+  }
+
+  if (autoToggle) {
+    fetch("/cgi-bin/api?action=ota_schedule_get", { credentials: "include" })
+      .then(function (r) { return r.json(); })
+      .then(paintSchedule)
+      .catch(function () {
+        if (scheduleStatus) scheduleStatus.textContent = "Scheduled time: 2:00 PM. Could not read the saved setting.";
+      });
+    autoToggle.addEventListener("change", function () {
+      var want = autoToggle.checked ? "1" : "0";
+      autoToggle.disabled = true;
+      postAction("ota_schedule_set", { enabled: want })
+        .then(function (data) {
+          autoToggle.disabled = rollbackBusy;
+          if (!data || data.status !== "ok") {
+            autoToggle.checked = want !== "1";
+            if (typeof showToast === "function") showToast((data && data.message) || "Could not save automatic updates", "error");
+            return;
+          }
+          paintSchedule(data);
+          if (typeof showToast === "function") showToast(data.message || "Saved", "success");
+        })
+        .catch(function () {
+          autoToggle.disabled = false;
+          autoToggle.checked = want !== "1";
+          if (typeof showToast === "function") showToast("Could not save automatic updates", "error");
+        });
+    });
+  }
+
+  function selectedRelease() {
+    if (!releaseSelect) return null;
+    var opt = releaseSelect.options[releaseSelect.selectedIndex];
+    if (!opt || !opt.value) return null;
+    return {
+      tag: opt.value,
+      version: opt.getAttribute("data-version") || "",
+      published: opt.getAttribute("data-published") || "",
+      current: opt.getAttribute("data-current") === "1",
+      notes: opt.getAttribute("data-notes") || ""
+    };
+  }
+
+  function paintSelected(rel, extra) {
+    if (!selectedDetail) return;
+    if (!rel) {
+      selectedDetail.textContent = "Select a release, then Load. Loading does not install firmware.";
+      return;
+    }
+    var lines = [
+      (rel.current ? "Installed version: " : "Selected version: ") + (rel.version || rel.tag),
+      "Tag: " + rel.tag,
+      rel.published ? "Published: " + rel.published : ""
+    ];
+    var noteLines = releaseLines(rel.notes).slice(0, 4);
+    if (noteLines.length) lines.push(noteLines.join(" "));
+    if (extra) lines.push(extra);
+    selectedDetail.textContent = lines.filter(Boolean).join("\n");
+  }
+
+  function refreshReleaseChoices() {
+    if (!releaseSelect) return;
+    releaseSelect.disabled = true;
+    fetch("/cgi-bin/api?action=ota_releases", { credentials: "include" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        releaseSelect.innerHTML = "";
+        var placeholder = document.createElement("option");
+        placeholder.value = "";
+        if (!data || data.status !== "ok") {
+          placeholder.textContent = "Could not load releases";
+          releaseSelect.appendChild(placeholder);
+          if (rollbackStatus) rollbackStatus.textContent = (data && data.message) || "GitHub releases could not be loaded.";
+          return;
+        }
+        var rows = data.releases || [];
+        if (!rows.length) {
+          placeholder.textContent = "No eligible releases";
+          releaseSelect.appendChild(placeholder);
+          if (rollbackStatus) rollbackStatus.textContent = "No production release with update.tar.gz was found.";
+          return;
+        }
+        placeholder.textContent = "Select a release";
+        releaseSelect.appendChild(placeholder);
+        rows.forEach(function (rel) {
+          var opt = document.createElement("option");
+          opt.value = rel.tag;
+          opt.setAttribute("data-version", rel.version || "");
+          opt.setAttribute("data-published", rel.published || "");
+          opt.setAttribute("data-current", String(rel.current) === "1" ? "1" : "0");
+          opt.setAttribute("data-notes", rel.notes || "");
+          opt.textContent = (rel.version || rel.tag) + (String(rel.current) === "1" ? " (installed)" : "") + (rel.published ? " — " + String(rel.published).slice(0, 10) : "");
+          releaseSelect.appendChild(opt);
+        });
+        if (rollbackStatus) rollbackStatus.textContent = "";
+      })
+      .catch(function () {
+        if (rollbackStatus) rollbackStatus.textContent = "GitHub releases could not be loaded.";
+      })
+      .then(function () {
+        if (releaseSelect) releaseSelect.disabled = rollbackBusy;
+        loadedTag = "";
+        if (btnDownload) btnDownload.disabled = true;
+        if (btnInstall) btnInstall.disabled = true;
+        if (btnLoad) btnLoad.disabled = rollbackBusy || !releaseSelect || !releaseSelect.value;
+      });
+  }
+
+  if (releaseSelect) {
+    releaseSelect.addEventListener("change", function () {
+      loadedTag = "";
+      if (btnDownload) btnDownload.disabled = true;
+      if (btnInstall) btnInstall.disabled = true;
+      if (btnLoad) btnLoad.disabled = rollbackBusy || !releaseSelect.value;
+      paintSelected(selectedRelease());
+    });
+    refreshReleaseChoices();
+  }
+
+  if (btnLoad) {
+    btnLoad.addEventListener("click", function () {
+      var rel = selectedRelease();
+      if (!rel || rollbackBusy) return;
+      btnLoad.disabled = true;
+      if (rollbackStatus) rollbackStatus.textContent = "Loading " + rel.tag + "…";
+      postAction("ota_load_release", { tag: rel.tag })
+        .then(function (data) {
+          btnLoad.disabled = rollbackBusy || !releaseSelect.value;
+          if (!data || data.status !== "ok") {
+            loadedTag = "";
+            if (btnDownload) btnDownload.disabled = true;
+            if (rollbackStatus) rollbackStatus.textContent = (data && data.message) || "Could not load that release.";
+            return;
+          }
+          loadedTag = data.tag || rel.tag;
+          var same = String(data.same) === "1";
+          paintSelected({
+            tag: loadedTag,
+            version: data.version || rel.version,
+            published: data.published || rel.published,
+            current: same,
+            notes: data.notes || rel.notes
+          }, same ? "This is the installed version. Nothing will be downloaded." : "Loaded. Download validates the file and does not install it.");
+          if (btnDownload) btnDownload.disabled = rollbackBusy || same;
+          if (btnInstall) btnInstall.disabled = true;
+          if (rollbackStatus) rollbackStatus.textContent = data.message || "Release loaded.";
+        })
+        .catch(function () {
+          btnLoad.disabled = false;
+          if (rollbackStatus) rollbackStatus.textContent = "Could not load that release.";
+        });
+    });
+  }
+
+  function watchSelectedDownload(tag) {
+    var bar = document.getElementById("otaProgressBar");
+    var label = document.getElementById("otaProgressLabel");
+    var container = document.getElementById("otaProgressContainer");
+    if (container) container.style.display = "block";
+    if (window.otaLogInterval) clearInterval(window.otaLogInterval);
+    window.otaLogInterval = setInterval(function () {
+      fetch("/cgi-bin/api?action=update_progress&t=" + Date.now(), { credentials: "include" })
+        .then(function (r) { return r.json(); })
+        .then(function (prog) {
+          var text = (prog && prog.progress) || "";
+          if (!text) return;
+          var lines = text.trim().split("\n");
+          var lastLine = lines[lines.length - 1];
+          if (label && lastLine.indexOf("Download complete") === -1 && lastLine.indexOf("FATAL") === -1) {
+            label.textContent = lastLine;
+          }
+          if (text.indexOf("FATAL") !== -1 || text.indexOf("CHECKSUM MISMATCH") !== -1) {
+            clearInterval(window.otaLogInterval);
+            setRollbackBusy(false);
+            if (btnInstall) btnInstall.disabled = true;
+            if (label) label.textContent = lastLine;
+            if (rollbackStatus) rollbackStatus.textContent = lastLine;
+            return;
+          }
+          if (text.indexOf("Download complete") !== -1) {
+            clearInterval(window.otaLogInterval);
+            postAction("ota_stage_release", { tag: tag })
+              .then(function (data) {
+                setRollbackBusy(false);
+                if (!data || data.status !== "ok") {
+                  if (btnInstall) btnInstall.disabled = true;
+                  if (rollbackStatus) rollbackStatus.textContent = (data && data.message) || "Validation failed. Firmware was not installed.";
+                  return;
+                }
+                if (bar) bar.style.width = "100%";
+                if (label) label.textContent = "Validated " + (data.version || tag) + ". Confirm install to flash it.";
+                if (btnInstall) btnInstall.disabled = false;
+                if (rollbackStatus) rollbackStatus.textContent = data.message || "";
+              })
+              .catch(function () {
+                setRollbackBusy(false);
+                if (btnInstall) btnInstall.disabled = true;
+                if (rollbackStatus) rollbackStatus.textContent = "Validation failed. Firmware was not installed.";
+              });
+          }
+        });
+    }, 1500);
+  }
+
+  if (btnDownload) {
+    btnDownload.addEventListener("click", function () {
+      if (!loadedTag || rollbackBusy) return;
+      var tag = loadedTag;
+      setRollbackBusy(true);
+      if (btnInstall) btnInstall.disabled = true;
+      var container = document.getElementById("otaProgressContainer");
+      var bar = document.getElementById("otaProgressBar");
+      var label = document.getElementById("otaProgressLabel");
+      if (container) container.style.display = "block";
+      if (bar) bar.style.width = "10%";
+      if (label) label.textContent = "Downloading " + tag + "…";
+      postAction("ota_download_release", { tag: tag })
+        .then(function (data) {
+          if (!data || data.status !== "ok") {
+            setRollbackBusy(false);
+            if (rollbackStatus) rollbackStatus.textContent = (data && data.message) || "Download did not start.";
+            return;
+          }
+          if (rollbackStatus) rollbackStatus.textContent = data.message || "";
+          watchSelectedDownload(tag);
+        })
+        .catch(function () {
+          setRollbackBusy(false);
+          if (rollbackStatus) rollbackStatus.textContent = "Download did not start.";
+        });
+    });
+  }
+
+  if (btnInstall) {
+    btnInstall.addEventListener("click", function () {
+      if (!loadedTag || rollbackBusy || typeof ffConfirm !== "function") return;
+      var tag = loadedTag;
+      var rel = selectedRelease();
+      var ver = (rel && rel.version) || tag;
+      ffConfirm("Install " + ver + " (" + tag + ")? The router will reboot and disconnect active sessions. Automatic updates will be turned off and will stay off until you turn them on again.", {
+        title: "Install selected version",
+        okText: "Install and reboot",
+        okClass: "btn btn-warning btn-sm",
+        onConfirm: function () {
+          setRollbackBusy(true);
+          if (typeof window.ffBeginFlashLock === "function") window.ffBeginFlashLock("ota");
+          postAction("ota_install_release", { tag: tag })
+            .then(function (data) {
+              if (!data || data.status !== "ok") {
+                setRollbackBusy(false);
+                if (typeof window.ffEndFlashLock === "function") window.ffEndFlashLock();
+                if (rollbackStatus) rollbackStatus.textContent = (data && data.message) || "Install did not start.";
+                return;
+              }
+              if (autoToggle) autoToggle.checked = false;
+              if (scheduleStatus) scheduleStatus.textContent = "Scheduled time: 2:00 PM. Automatic updates are off after installing " + ver + ".";
+              if (rollbackStatus) rollbackStatus.textContent = data.message || "";
+              if (typeof window.ffMarkFlashAccepted === "function") window.ffMarkFlashAccepted(data.message || "Installing. Do not unplug.");
+            })
+            .catch(function () {
+              setRollbackBusy(false);
+              if (typeof window.ffEndFlashLock === "function") window.ffEndFlashLock();
+              if (rollbackStatus) rollbackStatus.textContent = "Install did not start.";
+            });
+        }
+      });
+    });
+  }
+}

@@ -18,6 +18,58 @@ local M = {}
 
 
 
+-- coin_spam is keyed by the client MAC. insert_spam_limit (default 5) and the
+-- 300s lockout are unchanged. Only a new grab is counted. A re-lock of the
+-- same client is not, and a refusal (busy, missing, unlicensed) is not.
+-- fetchcoin never reaches this. An accepted coin still clears the counter.
+local function coin_spam_block(client_mac, now)
+    if client_mac == "" then return nil end
+    local limit_row = sqlite.query_row(config.CONFIG_DB,
+        "SELECT insert_spam_limit FROM config LIMIT 1")
+    local spam_limit = tonumber(limit_row and limit_row[1]) or 5
+    local spam_row = sqlite.query_row(config.ESP_DB,
+        string.format("SELECT fail_count, blocked_until FROM coin_spam WHERE client_mac='%s';", client_mac))
+    if not spam_row then return nil end
+    local fail_count = tonumber(spam_row[1]) or 0
+    local blocked_until = tonumber(spam_row[2]) or 0
+    if blocked_until > now then
+        local remaining = blocked_until - now
+        return {
+            status = "error",
+            message = "Rate limited. Try again in " .. remaining .. "s",
+            blocked = true,
+            cooldown = remaining
+        }
+    end
+    if fail_count >= spam_limit then
+        local block_time = now + 300
+        sqlite.execute(config.ESP_DB,
+            string.format("UPDATE coin_spam SET blocked_until=%d, fail_count=0 WHERE client_mac='%s';",
+                block_time, client_mac))
+        return {
+            status = "error",
+            message = "Too many empty attempts. Blocked for 5 minutes.",
+            blocked = true,
+            cooldown = 300
+        }
+    end
+    return nil
+end
+
+local function coin_spam_count_new_lock(client_mac, now)
+    if client_mac == "" then return end
+    sqlite.execute(config.ESP_DB,
+        string.format("INSERT INTO coin_spam (client_mac, fail_count, last_attempt) VALUES ('%s', 1, %d) ON CONFLICT(client_mac) DO UPDATE SET fail_count = fail_count + 1, last_attempt = %d;",
+            client_mac, now, now))
+end
+
+local function insert_window()
+    local timer_row = sqlite.query_row(config.CONFIG_DB, "SELECT insert_timer FROM config LIMIT 1;")
+    local insert_timer = tonumber(timer_row and timer_row[1]) or 60
+    if insert_timer <= 0 then insert_timer = 60 end
+    return insert_timer
+end
+
 function M.lock_coin(params)
     local slot_mac = sqlite.quote((params["slot_mac"] or ""):lower())
     local client_mac = sqlite.quote((params["mac"] or ""):lower())
@@ -33,16 +85,18 @@ function M.lock_coin(params)
     
     
     local raw_mac = (params["mac"] or ""):lower()
-    if raw_mac == "" then
-        local ip = os.getenv("REMOTE_ADDR") or ""
-        if ip ~= "" and security.is_valid_ip(ip) then
-            local f = io.popen("awk -v ip='" .. ip ..
-                "' '$1==ip && $4!=\"00:00:00:00:00:00\"{print $4; exit}' /proc/net/arp 2>/dev/null")
-            if f then
-                raw_mac = (f:read("*a") or ""):gsub("%s+", ""):lower()
-                f:close()
-            end
+    local ip = os.getenv("REMOTE_ADDR") or ""
+    if ip ~= "" and security.is_valid_ip(ip) then
+        local f = io.popen("awk -v ip='" .. ip ..
+            "' '$1==ip && $4!=\"00:00:00:00:00:00\"{print $4; exit}' /proc/net/arp 2>/dev/null")
+        if f then
+            local arp = (f:read("*a") or ""):gsub("%s+", ""):lower()
+            f:close()
+            if arp ~= "" then raw_mac = arp end
         end
+    end
+    if raw_mac ~= "" then
+        client_mac = sqlite.quote(raw_mac)
     end
     
     
@@ -55,41 +109,8 @@ function M.lock_coin(params)
 
     
     if client_mac ~= "" then
-        local now = os.time()
-
-        
-        local limit_row = sqlite.query_row(config.CONFIG_DB,
-            "SELECT insert_spam_limit FROM config LIMIT 1")
-        local spam_limit = tonumber(limit_row and limit_row[1]) or 5
-
-        
-        local spam_row = sqlite.query_row(config.ESP_DB,
-            string.format("SELECT fail_count, blocked_until FROM coin_spam WHERE client_mac='%s';", client_mac))
-
-        if spam_row then
-            local fail_count = tonumber(spam_row[1]) or 0
-            local blocked_until = tonumber(spam_row[2]) or 0
-
-            
-            if blocked_until > now then
-                local remaining = blocked_until - now
-                return { status = "error", message = "Rate limited. Try again in " .. remaining .. "s", blocked = true, cooldown = remaining }
-            end
-
-            
-            if fail_count >= spam_limit then
-                local block_time = now + 300
-                sqlite.execute(config.ESP_DB,
-                    string.format("UPDATE coin_spam SET blocked_until=%d, fail_count=0 WHERE client_mac='%s';",
-                        block_time, client_mac))
-                return { status = "error", message = "Too many empty attempts. Blocked for 5 minutes.", blocked = true, cooldown = 300 }
-            end
-        end
-
-        
-        sqlite.execute(config.ESP_DB,
-            string.format("INSERT INTO coin_spam (client_mac, fail_count, last_attempt) VALUES ('%s', 1, %d) ON CONFLICT(client_mac) DO UPDATE SET fail_count = fail_count + 1, last_attempt = %d;",
-                client_mac, now, now))
+        local blocked = coin_spam_block(client_mac, os.time())
+        if blocked then return blocked end
     end
 
     if slot_mac == "local" or slot_mac == "" then
@@ -132,7 +153,15 @@ function M.lock_coin(params)
             local credit_row = sqlite.query_row(config.ESP_DB,
                 string.format("SELECT coin_credit FROM esp_slots WHERE id='%s';", slot_id))
             local existing_coins = tonumber(credit_row and credit_row[1]) or 0
-            return { status = "ok", message = "Slot re-locked", slot_id = slot_id, coin = existing_coins }
+            local window_sec = insert_window()
+            return {
+                status = "ok",
+                message = "Slot re-locked",
+                slot_id = slot_id,
+                coin = existing_coins,
+                insert_timer = window_sec,
+                remaining_timer = window_sec
+            }
         end
 
         if (now_ts - locked_at) < 120 then
@@ -143,12 +172,30 @@ function M.lock_coin(params)
     
     local now = os.time()
     local client_id = (client_ident ~= "" and client_ident) or "client"
+    -- A coin can fall in before this lock is saved. That pulse is the
+    -- first coin. Keep it when the slot was free. An expired lock held
+    -- by somebody else still starts at 0.
+    local keep_coins = 0
+    if locked_by == "" then
+        local credit_row = sqlite.query_row(config.ESP_DB,
+            string.format("SELECT coin_credit FROM esp_slots WHERE id='%s';", slot_id))
+        keep_coins = tonumber(credit_row and credit_row[1]) or 0
+    end
+    -- Count only a lock this client did not already hold.
+    coin_spam_count_new_lock(client_mac, now)
     sqlite.execute(config.ESP_DB,
-        string.format("UPDATE esp_slots SET locked_by='%s', locked_at=%d, coin_credit=0 WHERE id='%s';",
-            sqlite.quote(client_id), now, slot_id))
+        string.format("UPDATE esp_slots SET locked_by='%s', locked_at=%d, coin_credit=%d WHERE id='%s';",
+            sqlite.quote(client_id), now, keep_coins, slot_id))
 
-
-    return { status = "ok", message = "Slot locked", slot_id = slot_id }
+    local window_sec = insert_window()
+    return {
+        status = "ok",
+        message = "Slot locked",
+        slot_id = slot_id,
+        coin = keep_coins,
+        insert_timer = window_sec,
+        remaining_timer = window_sec
+    }
 end
 
 
@@ -172,23 +219,66 @@ end
 
 
 
+local function insertcoin_log(code, detail)
+    -- Rate-limited denial trail for Kemo/peer diagnosis. Never logs KSK blobs.
+    local now = os.time()
+    local key = tostring(code or "deny")
+    _G._FF_INSERTCOIN_LOG = _G._FF_INSERTCOIN_LOG or {}
+    local last = tonumber(_G._FF_INSERTCOIN_LOG[key]) or 0
+    if (now - last) < 2 then return end
+    _G._FF_INSERTCOIN_LOG[key] = now
+    local msg = string.format("insertcoin deny code=%s %s", key, tostring(detail or ""))
+    os.execute(string.format("logger -t koneksik-coin %q >/dev/null 2>&1", msg))
+end
+
 function M.insert_coin(params)
-    local slot_mac = sqlite.quote((params["mac"] or ""):lower())
+    local claimed_raw = params["mac"] or ""
+    local slot_mac = sqlite.quote(claimed_raw:lower())
     local pulses = tonumber(params["pulses"]) or 0
 
     if slot_mac == "" then
-        return { success = false, error = "no_slot" }
+        insertcoin_log("NO_SLOT", "empty mac")
+        return { success = false, error = "no_slot", code = "NO_SLOT" }
     end
 
-    
+    -- The body MAC selects nothing by itself. The TCP peer must be that ESP.
+    local peer = require("fastfi.license.ksk_peer")
+    local ksk = require("fastfi.license.ksk_verify")
+    local peer_mac, peer_code = peer.read_production()
+    if not peer_mac or peer_mac == "" then
+        local code = peer_code or "PEER_UNOBSERVED"
+        insertcoin_log(code, "claimed=" .. tostring(claimed_raw):sub(1, 17))
+        return {
+            success = false,
+            error = "license_required",
+            code = code,
+        }
+    end
+    if ksk.norm_mac(claimed_raw) ~= ksk.norm_mac(peer_mac) then
+        insertcoin_log("PEER_MISMATCH",
+            "claimed=" .. tostring(claimed_raw):sub(1, 17) .. " peer=" .. tostring(peer_mac):sub(1, 17))
+        return { success = false, error = "license_required", code = "PEER_MISMATCH" }
+    end
+
     local slot_info = esp_db.get_slot_by_mac(slot_mac)
 
     if not slot_info then
-        return { success = false, error = "Slot not registered" }
+        insertcoin_log("SLOT_NOT_REGISTERED", tostring(claimed_raw):sub(1, 17))
+        return { success = false, error = "Slot not registered", code = "SLOT_NOT_REGISTERED" }
     end
 
-    if slot_info.license_status ~= "free" and slot_info.license_status ~= "licensed" then
-        return { success = false, error = "license_required", slot_id = slot_info.id }
+    -- Protected coin credit. Slot status is not an entitlement.
+    -- Identity is the observed peer, then the current KSK predicate.
+    local gate = require("fastfi.license.ksk_now").valid_now(peer_mac)
+    if not gate.valid then
+        local code = gate.code or "KSK_DENIED"
+        insertcoin_log(code, "peer=" .. tostring(peer_mac):sub(1, 17))
+        return {
+            success = false,
+            error = "license_required",
+            code = code,
+            slot_id = slot_info.id,
+        }
     end
 
     
@@ -257,7 +347,7 @@ function M.list_esp_devices(params)
     
     return {
         router_mac = router_mac,
-        router_license_status = license_info.license_status,
+        router_license_status = (require("fastfi.api.routes.license").rtr_license_valid_now().valid) and "active" or "inactive",
         router_license_key = "***REDACTED***",
         total_esp_slots = tonumber(total_row and total_row[1]) or 0,
         available_licenses = tonumber(available_row and available_row[1]) or 0,
@@ -351,27 +441,96 @@ function M.delete_esp_device(params)
     end
 
     local safe_id = sqlite.quote(tostring(slot_id))
+    local force = tostring(params["force"] or params["confirm_unbind"] or "") == "1"
+        or tostring(params["force"] or "") == "true"
+        or tostring(params["confirm_unbind"] or "") == "true"
 
-    
-    
-    
-    
-    
-    
-    
-    
     local slot = sqlite.query_row(config.ESP_DB,
-        string.format("SELECT license_key FROM esp_slots WHERE id='%s';", safe_id))
-    if slot and slot[1] and slot[1] ~= "" then
-        sqlite.execute(config.ESP_DB,
-            string.format("UPDATE esp_licenses SET status='available', used_slot_id=NULL, used_at=NULL WHERE license_key='%s';",
-                sqlite.quote(slot[1])))
+        string.format(
+            "SELECT license_key, slot_mac, COALESCE(license_status,''), COALESCE(slot_name,'ESP32') " ..
+            "FROM esp_slots WHERE id='%s';",
+            safe_id))
+    if not slot then
+        return { status = "error", message = "ESP device not found" }
     end
 
-    sqlite.execute(config.ESP_DB,
-        string.format("DELETE FROM esp_slots WHERE id='%s';", safe_id))
+    local license_key = slot[1] or ""
+    local slot_mac = slot[2] or ""
+    local license_status = slot[3] or ""
+    local slot_name = slot[4] or "ESP32"
+    local is_live = (license_status == "licensed" or license_status == "free") and license_key ~= ""
 
-    return { status = "ok", message = "ESP device deleted" }
+    -- Bound device: require explicit force/confirm_unbind (UI confirmation).
+    if is_live and not force then
+        return {
+            status = "error",
+            code = "REQUIRES_UNBIND",
+            message = "This ESP is bound to a KSK license. Confirm Delete to Unbind (clear live binding, keep signed .ksk), then remove the registered device. Or use Unbind first.",
+            license_id = license_key,
+            slot_mac = slot_mac,
+            slot_name = slot_name,
+            requires_unbind = true,
+        }
+    end
+
+    -- Same lifecycle as Unbind for related slots, then delete this row.
+    -- Signed .ksk and history columns stay on esp_licenses.
+    -- All writes share one BEGIN IMMEDIATE transaction; failures roll back.
+    local ok_txn, txn_err = sqlite.transaction(config.ESP_DB, function(exec, qrow)
+        if license_key ~= "" then
+            local key = sqlite.quote(license_key)
+            local lic = qrow(string.format(
+                "SELECT COALESCE(live_mac,''), COALESCE(last_live_mac,'') FROM esp_licenses " ..
+                "WHERE license_key='%s' OR license_id='%s' LIMIT 1;",
+                key, key))
+            local live_mac = (lic and lic[1]) or ""
+            local last_live = (lic and lic[2]) or slot_mac
+            exec(string.format(
+                "UPDATE esp_slots SET license_status='unlicensed', license_key=NULL " ..
+                "WHERE license_key='%s' OR license_key='%s';",
+                key, key))
+            local function clear_mac(mac)
+                mac = tostring(mac or ""):upper():gsub("%s+", "")
+                if mac == "" then return end
+                exec(string.format(
+                    "UPDATE esp_slots SET license_status='unlicensed', license_key=NULL " ..
+                    "WHERE UPPER(slot_mac)='%s' AND (license_key='%s' OR license_key='%s' OR " ..
+                    "license_key IS NULL OR TRIM(COALESCE(license_key,''))='');",
+                    sqlite.quote(mac), key, key))
+            end
+            clear_mac(live_mac)
+            clear_mac(last_live)
+            clear_mac(slot_mac)
+            exec(string.format(
+                "UPDATE esp_licenses SET status='unbound', used_slot_id=NULL, " ..
+                "last_live_mac=CASE WHEN live_mac IS NOT NULL AND TRIM(live_mac)!='' THEN live_mac ELSE last_live_mac END, " ..
+                "live_mac=NULL, ksk_ever_bound=1 WHERE license_key='%s' OR license_id='%s';",
+                key, key))
+        end
+        exec(string.format("DELETE FROM esp_slots WHERE id='%s';", safe_id))
+        local gone = qrow(string.format(
+            "SELECT id FROM esp_slots WHERE id='%s' LIMIT 1;", safe_id))
+        if gone then
+            error("delete did not remove esp_slots row id=" .. tostring(slot_id), 0)
+        end
+    end)
+
+    if not ok_txn then
+        return {
+            status = "error",
+            code = "DATABASE_ERROR",
+            message = "Delete failed; no changes were kept. " .. tostring(txn_err or "database error"),
+            license_id = license_key,
+            slot_mac = slot_mac,
+        }
+    end
+
+    return {
+        status = "ok",
+        message = "ESP device deleted. Live binding cleared; signed KSK retained.",
+        license_id = license_key,
+        unbound = (license_key ~= ""),
+    }
 end
 
 function M.rename_esp_slot(params)
@@ -403,12 +562,17 @@ function M.register_esp_slot(params)
         return { licensed = false, error = "missing_mac" }
     end
 
-    -- Auto-detect path: ESP (or Admin) sends license_id with MAC
-    if license_id ~= "" and license_id ~= "FASTFI-FREE-ESP" then
+    -- Signed KSK is required. license_id alone cannot establish a binding.
+    local ksk_b64 = params["ksk_b64"] or params["ksk"] or ""
+    local has_ksk = type(ksk_b64) == "string" and ksk_b64 ~= ""
+    if has_ksk or (license_id ~= "" and license_id ~= "FASTFI-FREE-ESP") then
         local esp_license = require("fastfi.api.routes.esp_license")
         local det = esp_license.detect({
             mac = esp_mac,
+            chip_id = params["chip_id"] or params["chip"],
             license_id = license_id,
+            ksk_b64 = params["ksk_b64"],
+            ksk = params["ksk"],
             name = esp_name,
             _from_register = true,
         })
@@ -479,10 +643,11 @@ end
 
 
 function M.esp_status(params)
-    local esp_mac = (params["mac"] or ""):lower()
+    local raw = tostring(params["mac"] or "")
+    local esp_mac = string.upper(raw:gsub("%s+", ""):gsub("-", ":"))
     local status = params["status"] or "online"
     
-    if esp_mac == "" then
+    if esp_mac == "" or not esp_mac:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then
         return { status = "error", message = "missing_mac" }
     end
     
@@ -496,12 +661,13 @@ function M.esp_status(params)
     
     
     sqlite.execute(config.ESP_DB,
-        string.format("UPDATE esp_slots SET status='%s', last_seen=%d WHERE slot_mac='%s';",
-            sqlite.quote(status), now, esp_mac))
+        string.format("UPDATE esp_slots SET status='%s', last_seen=%d WHERE UPPER(slot_mac)='%s';",
+            sqlite.quote(status), now, sqlite.quote(esp_mac)))
             
     
     local lock_row = sqlite.query_row(config.ESP_DB,
-        string.format("SELECT locked_by, locked_at, grace_until FROM esp_slots WHERE slot_mac='%s';", esp_mac))
+        string.format("SELECT locked_by, locked_at, grace_until FROM esp_slots WHERE UPPER(slot_mac)='%s';",
+            sqlite.quote(esp_mac)))
     
     local is_locked = false
     if lock_row then
